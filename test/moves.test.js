@@ -32,3 +32,15 @@ test('legalPlays with no current combo returns the same set as candidateLeads', 
   const legal = Moves.legalPlays(hand, null, level);
   assert.equal(legal.length, leads.length);
 });
+
+test('candidateLeads only generates 5-card straights, never longer runs', () => {
+  const longRunHand = [
+    c('3','S','1'), c('4','H','2'), c('5','D','3'),
+    c('6','C','4'), c('7','S','5'), c('8','H','6')
+  ];
+  const leads = Moves.candidateLeads(longRunHand, level);
+  const straightsAndFlushes = leads.filter(x => x.category === 'straight' || (x.category === 'bomb' && x.bombSubtype === 'straight_flush'));
+  assert.ok(!straightsAndFlushes.some(s => s.cards.length !== 5), 'no straight candidate should have length other than 5');
+  assert.ok(straightsAndFlushes.some(s => s.cards.map(c => c.rank).join(',') === '3,4,5,6,7'));
+  assert.ok(straightsAndFlushes.some(s => s.cards.map(c => c.rank).join(',') === '4,5,6,7,8'));
+});

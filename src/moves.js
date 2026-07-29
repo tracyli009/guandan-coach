@@ -33,12 +33,10 @@
     }
 
     const naturalRanks = Cards.RANK_ORDER;
-    for (let windowLen = 5; windowLen <= 12; windowLen++) {
-      for (let start = 0; start + windowLen <= naturalRanks.length; start++) {
-        const windowRanks = naturalRanks.slice(start, start + windowLen);
-        if (windowRanks.every(r => groups.has(r))) {
-          candidates.push(windowRanks.map(r => groups.get(r)[0]));
-        }
+    for (let start = 0; start + 5 <= naturalRanks.length; start++) {
+      const windowRanks = naturalRanks.slice(start, start + 5);
+      if (windowRanks.every(r => groups.has(r))) {
+        candidates.push(windowRanks.map(r => groups.get(r)[0]));
       }
     }
     for (let start = 0; start + 2 <= naturalRanks.length; start++) {
