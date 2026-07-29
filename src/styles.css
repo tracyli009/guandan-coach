@@ -1,1 +1,40 @@
-body { font-family: sans-serif; }
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #0b3d2e;
+  color: #f2f2f2;
+  margin: 0;
+  padding: 16px;
+}
+h1 { font-size: 1.4rem; margin: 0 0 8px; }
+#app { max-width: 960px; margin: 0 auto; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+#table { background: #0f5132; border-radius: 12px; padding: 16px; }
+.seat { text-align: center; margin: 8px 0; }
+.middle-row { display: flex; justify-content: space-between; align-items: center; }
+#trickArea { flex: 1; text-align: center; font-size: 1.1rem; min-height: 2em; }
+.card {
+  display: inline-block;
+  min-width: 42px;
+  padding: 8px 6px;
+  margin: 2px;
+  background: #fff;
+  color: #222;
+  border: 1px solid #999;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.card.selected { transform: translateY(-10px); border-color: #ffcc00; box-shadow: 0 0 6px #ffcc00; }
+#controls { margin-top: 8px; }
+#controls button, #reviewModal button {
+  padding: 8px 16px; margin-right: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 1rem;
+}
+#btnPlay { background: #ffcc00; }
+#btnPass { background: #ccc; }
+#coachPanel, #historyPanel {
+  background: #1b1b1b; color: #f2f2f2; border-radius: 8px; padding: 12px; margin-top: 12px;
+}
+#reviewModal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; }
+#reviewModal.hidden { display: none; }
+.modalBox { background: #fff; color: #222; padding: 24px; border-radius: 12px; max-width: 480px; width: 90%; }

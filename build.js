@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SRC = path.join(__dirname, 'src');
-const files = []; // filled in as src/*.js modules are added in later tasks
+const files = ['cards.js', 'combos.js', 'moves.js', 'engine.js', 'ai.js', 'coach-realtime.js', 'coach-review.js', 'coach-history.js', 'ui.js'];
 
 function build() {
   const template = fs.readFileSync(path.join(SRC, 'template.html'), 'utf8');
