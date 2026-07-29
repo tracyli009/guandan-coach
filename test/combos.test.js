@@ -61,6 +61,14 @@ test('wildcard completes a straight gap', () => {
   assert.equal(combo.usedWildcardAs, '5');
 });
 
+test('wildcard substitution still works when a second wildcard-eligible card is present and stays literal', () => {
+  const wc1 = { rank: '9', suit: 'H', id: 'wc-a' };
+  const wc2 = { rank: '9', suit: 'H', id: 'wc-b' };
+  const combo = Combos.classify([c('6','S'), c('7','D'), c('8','C'), wc1, wc2], '9');
+  assert.equal(combo.category, 'straight');
+  assert.equal(combo.usedWildcardAs, '5');
+});
+
 test('compare: higher single beats lower single', () => {
   assert.ok(Combos.compare(Combos.classify([c('9','S')], level), Combos.classify([c('7','S')], level)) > 0);
 });

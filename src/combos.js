@@ -115,17 +115,17 @@
     if (direct) return finalizeCompareValue(direct, levelRank);
 
     const wildcards = cards.filter(c => Cards.isWildcard(c, levelRank));
-    if (wildcards.length !== 1) return null;
+    if (wildcards.length === 0) return null;
 
-    const wc = wildcards[0];
-    const others = cards.filter(c => c.id !== wc.id);
-
-    for (const substituteRank of RANK_ORDER) {
-      if (substituteRank === levelRank) continue;
-      const substituted = others.concat([{ rank: substituteRank, suit: wc.suit, id: wc.id }]);
-      const result = classifyPlain(substituted);
-      if (result) {
-        return Object.assign({}, finalizeCompareValue(result, levelRank), { usedWildcardAs: substituteRank });
+    for (const wc of wildcards) {
+      const others = cards.filter(c => c.id !== wc.id);
+      for (const substituteRank of RANK_ORDER) {
+        if (substituteRank === levelRank) continue;
+        const substituted = others.concat([{ rank: substituteRank, suit: wc.suit, id: wc.id }]);
+        const result = classifyPlain(substituted);
+        if (result) {
+          return Object.assign({}, finalizeCompareValue(result, levelRank), { usedWildcardAs: substituteRank });
+        }
       }
     }
     return null;
