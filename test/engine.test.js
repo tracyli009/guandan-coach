@@ -75,3 +75,23 @@ test('teamLevelGain: 1st & 2nd same team = 3, 1st & 3rd = 2, 1st & 4th = 1', () 
   assert.equal(Engine.teamLevelGain([0, 1, 2]).gain, 2);
   assert.equal(Engine.teamLevelGain([0, 1, 3]).gain, 1);
 });
+
+test('when the trick leader finishes their hand, all remaining active players still get a turn before the trick closes', () => {
+  const state = baseState([
+    [card('3', 'S', 'a')],
+    [card('4', 'S', 'b')],
+    [card('5', 'S', 'c')],
+    [card('6', 'S', 'd')]
+  ]);
+  Engine.playCombo(state, 0, [state.hands[0][0]]); // P0 leads and empties hand
+  assert.deepEqual(state.finishedOrder, [0]);
+  assert.equal(state.currentTurn, 1);
+  Engine.pass(state, 1);
+  assert.equal(state.currentTurn, 2, 'P2 must still get a turn even though the leader already finished');
+  Engine.pass(state, 2);
+  assert.equal(state.currentTurn, 3, 'P3 must still get a turn before the trick closes');
+  Engine.pass(state, 3);
+  assert.equal(state.currentCombo, null, 'trick should close only after all three remaining active players acted');
+  assert.equal(state.currentLeader, 1, 'leadership passes to the next active player after the original leader, who already finished');
+  assert.equal(state.currentTurn, 1);
+});

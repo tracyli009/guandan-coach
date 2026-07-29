@@ -78,7 +78,7 @@
 
   function advanceTurnAfterPlay(state) {
     if (state.finishedOrder.length >= 3) { state.currentTurn = null; return; }
-    const remainingOthers = activePlayerCount(state) - 1;
+    const remainingOthers = activePlayerCount(state) - (isFinished(state, state.lastPlayerIndex) ? 0 : 1);
     if (remainingOthers <= 0) {
       state.currentCombo = null;
       state.passStreak = 0;
@@ -92,7 +92,7 @@
   }
 
   function advanceTurnAfterPass(state) {
-    const remainingOthers = activePlayerCount(state) - 1;
+    const remainingOthers = activePlayerCount(state) - (isFinished(state, state.lastPlayerIndex) ? 0 : 1);
     if (state.passStreak >= remainingOthers) {
       state.currentCombo = null;
       state.passStreak = 0;
