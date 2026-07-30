@@ -32,6 +32,17 @@ header { display: flex; justify-content: space-between; align-items: center; mar
   font-weight: bold;
 }
 .card.selected { transform: translateY(-10px); border-color: #ffcc00; box-shadow: 0 0 6px #ffcc00; }
+.playedCards {
+  min-height: 2em;
+  margin-top: 6px;
+  padding: 6px;
+  background: rgba(255,255,255,0.08);
+  border: 1px dashed rgba(255,255,255,0.3);
+  border-radius: 6px;
+  font-size: 1rem;
+  color: #ffe680;
+}
+.playedCards:empty::before { content: '\00a0'; }
 #controls { margin-top: 8px; }
 #controls button, #reviewModal button {
   padding: 8px 16px; margin-right: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 1rem;
@@ -54,14 +65,27 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     <div id="levelIndicator"></div>
   </header>
   <section id="table">
-    <div class="seat" id="seat-2"><h3>对家 (北)</h3><div class="handCount" id="count-2"></div></div>
+    <div class="seat" id="seat-2">
+      <h3>对家 (北)</h3>
+      <div class="handCount" id="count-2"></div>
+      <div class="playedCards" id="played-2"></div>
+    </div>
     <div class="middle-row">
-      <div class="seat" id="seat-1"><h3>右家 (东)</h3><div class="handCount" id="count-1"></div></div>
+      <div class="seat" id="seat-1">
+        <h3>右家 (东)</h3>
+        <div class="handCount" id="count-1"></div>
+        <div class="playedCards" id="played-1"></div>
+      </div>
       <div id="trickArea"></div>
-      <div class="seat" id="seat-3"><h3>左家 (西)</h3><div class="handCount" id="count-3"></div></div>
+      <div class="seat" id="seat-3">
+        <h3>左家 (西)</h3>
+        <div class="handCount" id="count-3"></div>
+        <div class="playedCards" id="played-3"></div>
+      </div>
     </div>
     <div class="seat" id="seat-0">
       <h3>你 (南)</h3>
+      <div class="playedCards" id="played-0"></div>
       <div id="hand-0"></div>
       <div id="controls">
         <button id="btnPlay">出牌</button>
@@ -749,7 +773,9 @@ header { display: flex; justify-content: space-between; align-items: center; mar
   let state = null;
   let selectedIds = new Set();
   let moveLog = [];
+  let trickPlays = { 0: null, 1: null, 2: null, 3: null };
   const levelRank = '2';
+  const BOT_MOVE_DELAY_MS = 1500;
 
   function loadHistory() {
     try {
@@ -783,6 +809,21 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     });
   }
 
+  function recordTrickAction(seat, cards, isPass) {
+    if (state.currentCombo) {
+      trickPlays[seat] = { cards: cards ? cards.slice() : [], isPass: !!isPass };
+    } else {
+      trickPlays = { 0: null, 1: null, 2: null, 3: null };
+    }
+  }
+
+  function renderPlayedCards(seat) {
+    const el = document.getElementById(`played-${seat}`);
+    const entry = trickPlays[seat];
+    if (!entry) { el.textContent = ''; return; }
+    el.textContent = entry.isPass ? '过' : entry.cards.map(cardLabel).join(' ');
+  }
+
   function render() {
     document.getElementById('levelIndicator').textContent = `当前级牌：${levelRank}`;
     [1, 2, 3].forEach(seat => {
@@ -802,17 +843,12 @@ header { display: flex; justify-content: space-between; align-items: center; mar
       handDiv.appendChild(btn);
     }
 
+    [0, 1, 2, 3].forEach(renderPlayedCards);
+
     const trickEl = document.getElementById('trickArea');
-    if (state.currentCombo) {
-      const lastPlay = state.history.length > 0 ? state.history[state.history.length - 1] : null;
-      const cardsLabel = lastPlay && lastPlay.cards && lastPlay.cards.length > 0
-        ? lastPlay.cards.map(cardLabel).join(' ')
-        : CoachRealtime.describeCombo(state.currentCombo);
-      const seatLabel = state.lastPlayerIndex === 0 ? '你' : (SEAT_LABEL[state.lastPlayerIndex] || ('座位' + state.lastPlayerIndex));
-      trickEl.textContent = `当前墩：${cardsLabel}（${seatLabel}出）`;
-    } else {
-      trickEl.textContent = '（新的一墩，等待出牌）';
-    }
+    trickEl.textContent = state.currentCombo
+      ? `本墩需要压过：${CoachRealtime.describeCombo(state.currentCombo)}`
+      : '（新的一墩，等待出牌）';
 
     const coachEl = document.getElementById('coachSuggestion');
     coachEl.textContent = state.currentTurn === 0 ? currentSuggestion().rationale : '等待其他玩家出牌…';
@@ -860,6 +896,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     const result = Engine.playCombo(state, 0, cards);
     if (result.error) { alert(result.error); return; }
     moveLog.push(entry);
+    recordTrickAction(0, cards, false);
     selectedIds = new Set();
     afterTurn(result.roundOver);
   }
@@ -871,6 +908,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     const result = Engine.pass(state, 0);
     if (result.error) { alert(result.error); return; }
     moveLog.push(entry);
+    recordTrickAction(0, [], true);
     afterTurn(false);
   }
 
@@ -890,9 +928,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
         ? Engine.pass(state, seat)
         : Engine.playCombo(state, seat, decision.combo.cards);
       if (result.error) { console.error('bot move rejected:', result.error); return; }
+      recordTrickAction(seat, decision.action === 'pass' ? [] : decision.combo.cards, decision.action === 'pass');
       render();
       if (result.roundOver) finishRound(); else maybeRunBotTurn();
-    }, 500);
+    }, BOT_MOVE_DELAY_MS);
   }
 
   function finishRound() {
@@ -916,6 +955,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     state = Engine.startRound(levelRank, Math.random);
     selectedIds = new Set();
     moveLog = [];
+    trickPlays = { 0: null, 1: null, 2: null, 3: null };
     render();
     maybeRunBotTurn();
   }

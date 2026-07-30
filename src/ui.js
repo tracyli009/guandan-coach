@@ -10,7 +10,9 @@
   let state = null;
   let selectedIds = new Set();
   let moveLog = [];
+  let trickPlays = { 0: null, 1: null, 2: null, 3: null };
   const levelRank = '2';
+  const BOT_MOVE_DELAY_MS = 1500;
 
   function loadHistory() {
     try {
@@ -44,6 +46,21 @@
     });
   }
 
+  function recordTrickAction(seat, cards, isPass) {
+    if (state.currentCombo) {
+      trickPlays[seat] = { cards: cards ? cards.slice() : [], isPass: !!isPass };
+    } else {
+      trickPlays = { 0: null, 1: null, 2: null, 3: null };
+    }
+  }
+
+  function renderPlayedCards(seat) {
+    const el = document.getElementById(`played-${seat}`);
+    const entry = trickPlays[seat];
+    if (!entry) { el.textContent = ''; return; }
+    el.textContent = entry.isPass ? '过' : entry.cards.map(cardLabel).join(' ');
+  }
+
   function render() {
     document.getElementById('levelIndicator').textContent = `当前级牌：${levelRank}`;
     [1, 2, 3].forEach(seat => {
@@ -63,17 +80,12 @@
       handDiv.appendChild(btn);
     }
 
+    [0, 1, 2, 3].forEach(renderPlayedCards);
+
     const trickEl = document.getElementById('trickArea');
-    if (state.currentCombo) {
-      const lastPlay = state.history.length > 0 ? state.history[state.history.length - 1] : null;
-      const cardsLabel = lastPlay && lastPlay.cards && lastPlay.cards.length > 0
-        ? lastPlay.cards.map(cardLabel).join(' ')
-        : CoachRealtime.describeCombo(state.currentCombo);
-      const seatLabel = state.lastPlayerIndex === 0 ? '你' : (SEAT_LABEL[state.lastPlayerIndex] || ('座位' + state.lastPlayerIndex));
-      trickEl.textContent = `当前墩：${cardsLabel}（${seatLabel}出）`;
-    } else {
-      trickEl.textContent = '（新的一墩，等待出牌）';
-    }
+    trickEl.textContent = state.currentCombo
+      ? `本墩需要压过：${CoachRealtime.describeCombo(state.currentCombo)}`
+      : '（新的一墩，等待出牌）';
 
     const coachEl = document.getElementById('coachSuggestion');
     coachEl.textContent = state.currentTurn === 0 ? currentSuggestion().rationale : '等待其他玩家出牌…';
@@ -121,6 +133,7 @@
     const result = Engine.playCombo(state, 0, cards);
     if (result.error) { alert(result.error); return; }
     moveLog.push(entry);
+    recordTrickAction(0, cards, false);
     selectedIds = new Set();
     afterTurn(result.roundOver);
   }
@@ -132,6 +145,7 @@
     const result = Engine.pass(state, 0);
     if (result.error) { alert(result.error); return; }
     moveLog.push(entry);
+    recordTrickAction(0, [], true);
     afterTurn(false);
   }
 
@@ -151,9 +165,10 @@
         ? Engine.pass(state, seat)
         : Engine.playCombo(state, seat, decision.combo.cards);
       if (result.error) { console.error('bot move rejected:', result.error); return; }
+      recordTrickAction(seat, decision.action === 'pass' ? [] : decision.combo.cards, decision.action === 'pass');
       render();
       if (result.roundOver) finishRound(); else maybeRunBotTurn();
-    }, 500);
+    }, BOT_MOVE_DELAY_MS);
   }
 
   function finishRound() {
@@ -177,6 +192,7 @@
     state = Engine.startRound(levelRank, Math.random);
     selectedIds = new Set();
     moveLog = [];
+    trickPlays = { 0: null, 1: null, 2: null, 3: null };
     render();
     maybeRunBotTurn();
   }

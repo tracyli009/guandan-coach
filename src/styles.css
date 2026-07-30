@@ -26,6 +26,17 @@ header { display: flex; justify-content: space-between; align-items: center; mar
   font-weight: bold;
 }
 .card.selected { transform: translateY(-10px); border-color: #ffcc00; box-shadow: 0 0 6px #ffcc00; }
+.playedCards {
+  min-height: 2em;
+  margin-top: 6px;
+  padding: 6px;
+  background: rgba(255,255,255,0.08);
+  border: 1px dashed rgba(255,255,255,0.3);
+  border-radius: 6px;
+  font-size: 1rem;
+  color: #ffe680;
+}
+.playedCards:empty::before { content: '\00a0'; }
 #controls { margin-top: 8px; }
 #controls button, #reviewModal button {
   padding: 8px 16px; margin-right: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 1rem;
