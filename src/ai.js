@@ -12,7 +12,14 @@
 
     if (!currentCombo) {
       if (options.length === 0) return { action: 'pass' };
-      const smallest = options.reduce((a, b) => (Combos.compare(a, b) < 0 ? a : b));
+      // candidateLeads mixes every category/length together, and Combos.compare only
+      // supports comparing two combos of the SAME category/length. Comparing raw
+      // compareValue avoids that crash, and never leads with a bomb unless a bomb is
+      // literally the only selection available (never happens in practice, since a
+      // single is always a valid lead whenever the hand is non-empty).
+      const nonBombLeads = options.filter(o => !o.isBomb);
+      const pool = nonBombLeads.length > 0 ? nonBombLeads : options;
+      const smallest = pool.reduce((a, b) => (a.compareValue <= b.compareValue ? a : b));
       return { action: 'play', combo: smallest };
     }
 

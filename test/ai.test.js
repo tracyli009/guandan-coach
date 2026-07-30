@@ -44,3 +44,14 @@ test('leads with the smallest available combo when there is no current combo', (
   assert.equal(decision.combo.category, 'single');
   assert.equal(decision.combo.compareValue, 1); // single '3'
 });
+
+test('leading with a heterogeneous hand (singles and pairs both available) does not throw and picks a sane smallest option', () => {
+  const hand = [
+    c('3', 'S', '1'), c('3', 'H', '2'),
+    c('9', 'S', '3'),
+    c('K', 'H', '4'), c('K', 'D', '5')
+  ];
+  const decision = AI.chooseAiPlay(hand, null, { selfIndex: 0, lastPlayerIndex: null, levelRank: level });
+  assert.equal(decision.action, 'play');
+  assert.equal(decision.combo.isBomb, false);
+});
