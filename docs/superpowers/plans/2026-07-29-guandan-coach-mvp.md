@@ -1134,7 +1134,14 @@ Expected: FAIL with "Cannot find module '../src/ai.js'"
 
     if (!currentCombo) {
       if (options.length === 0) return { action: 'pass' };
-      const smallest = options.reduce((a, b) => (Combos.compare(a, b) < 0 ? a : b));
+      // candidateLeads mixes every category/length together (singles, pairs, triples, ...),
+      // and Combos.compare only supports comparing two combos of the SAME category/length —
+      // it throws otherwise. Comparing raw compareValue avoids that, and never uses a bomb
+      // to lead unless a bomb is literally the only card selection available (never happens
+      // in practice, since a single is always a valid lead whenever the hand is non-empty).
+      const nonBombLeads = options.filter(o => !o.isBomb);
+      const pool = nonBombLeads.length > 0 ? nonBombLeads : options;
+      const smallest = pool.reduce((a, b) => (a.compareValue <= b.compareValue ? a : b));
       return { action: 'play', combo: smallest };
     }
 
