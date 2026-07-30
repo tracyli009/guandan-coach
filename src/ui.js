@@ -4,7 +4,7 @@
   const { Engine, Combos, Moves, AI, CoachRealtime, CoachReview, CoachHistory } = window.GD;
 
   const HISTORY_KEY = 'guandan_coach_history_v1';
-  const SUIT_SYMBOL = { S: '♠', H: '♥', D: '♦', C: '♣' };
+  const SUIT_SYMBOL = { S: '♠️', H: '♥️', D: '♦️', C: '♣️' };
   const SEAT_LABEL = { 1: '右家', 2: '对家', 3: '左家' };
 
   let state = null;

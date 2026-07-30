@@ -1671,7 +1671,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
   const { Engine, Cards, Combos, Moves, AI, CoachRealtime, CoachReview, CoachHistory } = window.GD;
 
   const HISTORY_KEY = 'guandan_coach_history_v1';
-  const SUIT_SYMBOL = { S: '♠', H: '♥', D: '♦', C: '♣' };
+  const SUIT_SYMBOL = { S: '♠️', H: '♥️', D: '♦️', C: '♣️' };
 
   let state = null;
   let selectedIds = new Set();
