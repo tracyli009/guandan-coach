@@ -82,6 +82,13 @@ test('wildcard substitution picks the strongest legal interpretation, not just t
   assert.equal(combo.compareValue, Cards.naturalIndex('9'));
 });
 
+test('wildcard direct interpretation is compared against stronger substitutions, not returned immediately', () => {
+  const combo = Combos.classify([c('3','S'), c('4','S'), c('5','S'), c('6','S'), c('2','H')], '2');
+  assert.equal(combo.category, 'straight');
+  assert.equal(combo.usedWildcardAs, '7');
+  assert.equal(combo.compareValue, Cards.naturalIndex('7'));
+});
+
 test('compare: higher single beats lower single', () => {
   assert.ok(Combos.compare(Combos.classify([c('9','S')], level), Combos.classify([c('7','S')], level)) > 0);
 });

@@ -111,17 +111,20 @@
 
   function classify(cards, levelRank) {
     if (!cards || cards.length === 0) return null;
+
+    // A fixed card selection has one achievable shape (category+length); a
+    // wildcard card only resolves which rank fills one slot within that
+    // shape (whether left at its own natural rank, i.e. "direct", or
+    // substituted for a different rank), so every valid interpretation
+    // found below is safely comparable by raw compareValue — always keep
+    // the strongest one, never short-circuit on the first one found.
+    let best = null;
     const direct = classifyPlain(cards);
-    if (direct) return finalizeCompareValue(direct, levelRank);
+    if (direct) {
+      best = finalizeCompareValue(direct, levelRank);
+    }
 
     const wildcards = cards.filter(c => Cards.isWildcard(c, levelRank));
-    if (wildcards.length === 0) return null;
-
-    // A fixed card selection has one achievable shape (category+length); the
-    // wildcard only resolves which rank fills one slot within that shape, so
-    // every valid interpretation found below is safely comparable by raw
-    // compareValue — pick the strongest one, not just the first one found.
-    let best = null;
     for (const wc of wildcards) {
       const others = cards.filter(c => c.id !== wc.id);
       for (const substituteRank of RANK_ORDER) {
