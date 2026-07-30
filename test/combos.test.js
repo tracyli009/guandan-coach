@@ -62,11 +62,24 @@ test('wildcard completes a straight gap', () => {
 });
 
 test('wildcard substitution still works when a second wildcard-eligible card is present and stays literal', () => {
+  // With two red-9 wildcard-eligible cards, only one is ever substituted per
+  // combo (the other is played at its literal face value, 9). That leaves two
+  // legal completions of this 5-card straight selection: 5-6-7-8-9 (wildcard
+  // as '5') or 6-7-8-9-10 (wildcard as '10') — both category 'straight',
+  // length 5, so per Fix 2 the strongest (10-high) interpretation wins.
   const wc1 = { rank: '9', suit: 'H', id: 'wc-a' };
   const wc2 = { rank: '9', suit: 'H', id: 'wc-b' };
   const combo = Combos.classify([c('6','S'), c('7','D'), c('8','C'), wc1, wc2], '9');
   assert.equal(combo.category, 'straight');
-  assert.equal(combo.usedWildcardAs, '5');
+  assert.equal(combo.usedWildcardAs, '10');
+  assert.equal(combo.compareValue, Cards.naturalIndex('10'));
+});
+
+test('wildcard substitution picks the strongest legal interpretation, not just the first one found', () => {
+  const combo = Combos.classify([c('9','S'), c('9','H'), c('3','S'), c('3','H'), c('2','H')], '2');
+  assert.equal(combo.category, 'triple_pair');
+  assert.equal(combo.usedWildcardAs, '9');
+  assert.equal(combo.compareValue, Cards.naturalIndex('9'));
 });
 
 test('compare: higher single beats lower single', () => {

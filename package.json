@@ -5,5 +5,8 @@
   "scripts": {
     "test": "node --test",
     "build": "node build.js"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

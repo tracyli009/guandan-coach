@@ -275,18 +275,25 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     const wildcards = cards.filter(c => Cards.isWildcard(c, levelRank));
     if (wildcards.length === 0) return null;
 
+    // A fixed card selection has one achievable shape (category+length); the
+    // wildcard only resolves which rank fills one slot within that shape, so
+    // every valid interpretation found below is safely comparable by raw
+    // compareValue — pick the strongest one, not just the first one found.
+    let best = null;
     for (const wc of wildcards) {
       const others = cards.filter(c => c.id !== wc.id);
       for (const substituteRank of RANK_ORDER) {
         if (substituteRank === levelRank) continue;
         const substituted = others.concat([{ rank: substituteRank, suit: wc.suit, id: wc.id }]);
         const result = classifyPlain(substituted);
-        if (result) {
-          return Object.assign({}, finalizeCompareValue(result, levelRank), { usedWildcardAs: substituteRank });
+        if (!result) continue;
+        const candidate = Object.assign({}, finalizeCompareValue(result, levelRank), { usedWildcardAs: substituteRank });
+        if (!best || candidate.compareValue > best.compareValue) {
+          best = candidate;
         }
       }
     }
-    return null;
+    return best;
   }
 
   function compare(a, b) {
@@ -730,10 +737,11 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 /* UI_BOUNDARY */
 (function () {
   'use strict';
-  const { Engine, Cards, Combos, Moves, AI, CoachRealtime, CoachReview, CoachHistory } = window.GD;
+  const { Engine, Combos, Moves, AI, CoachRealtime, CoachReview, CoachHistory } = window.GD;
 
   const HISTORY_KEY = 'guandan_coach_history_v1';
   const SUIT_SYMBOL = { S: '♠', H: '♥', D: '♦', C: '♣' };
+  const SEAT_LABEL = { 1: '右家', 2: '对家', 3: '左家' };
 
   let state = null;
   let selectedIds = new Set();
@@ -742,7 +750,9 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 
   function loadHistory() {
     try {
-      return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+      const parsed = JSON.parse(localStorage.getItem(HISTORY_KEY));
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(r => r && typeof r.cooperationScore === 'number' && Array.isArray(r.patterns));
     } catch (e) {
       return [];
     }
@@ -789,9 +799,17 @@ header { display: flex; justify-content: space-between; align-items: center; mar
       handDiv.appendChild(btn);
     }
 
-    document.getElementById('trickArea').textContent = state.currentCombo
-      ? `当前墩：${CoachRealtime.describeCombo(state.currentCombo)}（${state.lastPlayerIndex === 0 ? '你' : '座位' + state.lastPlayerIndex}出）`
-      : '（新的一墩，等待出牌）';
+    const trickEl = document.getElementById('trickArea');
+    if (state.currentCombo) {
+      const lastPlay = state.history.length > 0 ? state.history[state.history.length - 1] : null;
+      const cardsLabel = lastPlay && lastPlay.cards && lastPlay.cards.length > 0
+        ? lastPlay.cards.map(cardLabel).join(' ')
+        : CoachRealtime.describeCombo(state.currentCombo);
+      const seatLabel = state.lastPlayerIndex === 0 ? '你' : (SEAT_LABEL[state.lastPlayerIndex] || ('座位' + state.lastPlayerIndex));
+      trickEl.textContent = `当前墩：${cardsLabel}（${seatLabel}出）`;
+    } else {
+      trickEl.textContent = '（新的一墩，等待出牌）';
+    }
 
     const coachEl = document.getElementById('coachSuggestion');
     coachEl.textContent = state.currentTurn === 0 ? currentSuggestion().rationale : '等待其他玩家出牌…';
@@ -807,18 +825,18 @@ header { display: flex; justify-content: space-between; align-items: center; mar
       return;
     }
     el.innerHTML = `
-      <p>已完成 ${summary.gamesPlayed} 局，平均配合分 ${summary.averageCooperationScore}</p>
+      <p>已完成 ${Number(summary.gamesPlayed)} 局，平均配合分 ${Number(summary.averageCooperationScore)}</p>
       <p>${summary.dominantArchetype ? '主要风格：' + summary.dominantArchetype : ''}</p>
-      <p>配合分趋势：${summary.trend.join(' → ')}</p>
+      <p>配合分趋势：${summary.trend.map(Number).join(' → ')}</p>
     `;
   }
 
-  function logHumanMove(action, combo) {
+  function buildMoveLogEntry(action, combo) {
     const suggestion = currentSuggestion();
     const matched = action === suggestion.action &&
       (action === 'pass' || (combo && suggestion.combo &&
         combo.category === suggestion.combo.category && combo.compareValue === suggestion.combo.compareValue));
-    moveLog.push({
+    return {
       action,
       partnerWasWinning: !!(state.currentCombo && state.lastPlayerIndex !== null && Engine.TEAM_OF[state.lastPlayerIndex] === Engine.TEAM_OF[0]),
       comboCategory: combo ? combo.category : null,
@@ -826,7 +844,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
       handSizeBefore: state.hands[0].length,
       matchedSuggestion: matched,
       hadBeatingOptionNonBomb: currentLegalNonBombCheck()
-    });
+    };
   }
 
   function onPlay() {
@@ -835,9 +853,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     if (cards.length === 0) return;
     const combo = Combos.classify(cards, levelRank);
     if (!combo) { alert('这不是一手合法的牌型'); return; }
-    logHumanMove('play', combo);
+    const entry = buildMoveLogEntry('play', combo);
     const result = Engine.playCombo(state, 0, cards);
     if (result.error) { alert(result.error); return; }
+    moveLog.push(entry);
     selectedIds = new Set();
     afterTurn(result.roundOver);
   }
@@ -845,9 +864,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
   function onPass() {
     if (state.currentTurn !== 0) return;
     if (!state.currentCombo) { alert('领出方不能过牌'); return; }
-    logHumanMove('pass', null);
+    const entry = buildMoveLogEntry('pass', null);
     const result = Engine.pass(state, 0);
     if (result.error) { alert(result.error); return; }
+    moveLog.push(entry);
     afterTurn(false);
   }
 
@@ -866,6 +886,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
       const result = decision.action === 'pass'
         ? Engine.pass(state, seat)
         : Engine.playCombo(state, seat, decision.combo.cards);
+      if (result.error) { console.error('bot move rejected:', result.error); return; }
       render();
       if (result.roundOver) finishRound(); else maybeRunBotTurn();
     }, 500);
@@ -873,11 +894,17 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 
   function finishRound() {
     const review = CoachReview.reviewHand(moveLog);
+    const gain = Engine.teamLevelGain(state.finishedOrder);
+    const winnerLabel = gain.team === Engine.TEAM_OF[0] ? '你这边获胜' : '对方获胜';
     document.getElementById('reviewModal').classList.remove('hidden');
     const patternHtml = review.patterns.length
       ? '<ul>' + review.patterns.map(p => `<li>${p.label}（出现 ${p.count} 次）</li>`).join('') + '</ul>'
       : '<p>本局没有发现明显的配合问题，继续保持！</p>';
-    document.getElementById('reviewContent').innerHTML = `<p>配合分：${review.cooperationScore}</p>${patternHtml}`;
+    document.getElementById('reviewContent').innerHTML = `
+      <p>${winnerLabel}，本局升 ${gain.gain} 级</p>
+      <p>配合分：${review.cooperationScore}</p>
+      ${patternHtml}
+    `;
     saveHistoryRecord(review);
     renderHistoryPanel();
   }
@@ -892,7 +919,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 
   document.getElementById('btnPlay').onclick = onPlay;
   document.getElementById('btnPass').onclick = onPass;
-  document.getElementById('btnCloseReview').onclick = () => document.getElementById('reviewModal').classList.add('hidden');
+  document.getElementById('btnCloseReview').onclick = () => {
+    document.getElementById('reviewModal').classList.add('hidden');
+    startNewHand();
+  };
   document.getElementById('btnNextHand').onclick = () => {
     document.getElementById('reviewModal').classList.add('hidden');
     startNewHand();

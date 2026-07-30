@@ -117,18 +117,25 @@
     const wildcards = cards.filter(c => Cards.isWildcard(c, levelRank));
     if (wildcards.length === 0) return null;
 
+    // A fixed card selection has one achievable shape (category+length); the
+    // wildcard only resolves which rank fills one slot within that shape, so
+    // every valid interpretation found below is safely comparable by raw
+    // compareValue — pick the strongest one, not just the first one found.
+    let best = null;
     for (const wc of wildcards) {
       const others = cards.filter(c => c.id !== wc.id);
       for (const substituteRank of RANK_ORDER) {
         if (substituteRank === levelRank) continue;
         const substituted = others.concat([{ rank: substituteRank, suit: wc.suit, id: wc.id }]);
         const result = classifyPlain(substituted);
-        if (result) {
-          return Object.assign({}, finalizeCompareValue(result, levelRank), { usedWildcardAs: substituteRank });
+        if (!result) continue;
+        const candidate = Object.assign({}, finalizeCompareValue(result, levelRank), { usedWildcardAs: substituteRank });
+        if (!best || candidate.compareValue > best.compareValue) {
+          best = candidate;
         }
       }
     }
-    return null;
+    return best;
   }
 
   function compare(a, b) {

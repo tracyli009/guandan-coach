@@ -32,6 +32,9 @@
   - Sequential melds (顺子/钢板/三连对) and bombs compare using **natural rank order only** (2..A); the level-rank elevation described in the deck only applies to single/pair/triple/triple_pair comparisons.
   - AI and the real-time coach only consider melds it can form directly from grouped hand cards; they do not search for wildcard-completed melds. Humans can still manually select and play a wildcard-completed meld — the engine validates it correctly either way.
   - A round ends the instant the 3rd player empties their hand (the 4th is automatically last), matching common Guandan house rules and keeping the engine simple.
+  - Wildcard substitution only changes a card's rank, never its suit (the wildcard always keeps its own physical suit, Hearts). This means a wildcard can never help complete a 同花顺 (straight flush) bomb — e.g. `4S 5S 6S 7S` plus the wildcard yields a plain `straight`, never a `straight_flush`, even though real Guandan's 逢人配 rule also lets the wildcard substitute for any suit.
+
+The plan's code listings were corrected in place multiple times during implementation as real bugs were found by task review and by the final whole-branch review; the current listings reflect what was actually built.
 
 ## File Structure
 
@@ -87,8 +90,11 @@ All code below has been prototyped and run against real Node.js during plan-writ
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test",
     "build": "node build.js"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
 ```
@@ -587,20 +593,27 @@ Expected: FAIL with "Cannot find module '../src/combos.js'"
     if (direct) return finalizeCompareValue(direct, levelRank);
 
     const wildcards = cards.filter(c => Cards.isWildcard(c, levelRank));
-    if (wildcards.length !== 1) return null;
+    if (wildcards.length === 0) return null;
 
-    const wc = wildcards[0];
-    const others = cards.filter(c => c.id !== wc.id);
-
-    for (const substituteRank of RANK_ORDER) {
-      if (substituteRank === levelRank) continue;
-      const substituted = others.concat([{ rank: substituteRank, suit: wc.suit, id: wc.id }]);
-      const result = classifyPlain(substituted);
-      if (result) {
-        return Object.assign({}, finalizeCompareValue(result, levelRank), { usedWildcardAs: substituteRank });
+    // A fixed card selection has one achievable shape (category+length); the
+    // wildcard only resolves which rank fills one slot within that shape, so
+    // every valid interpretation found below is safely comparable by raw
+    // compareValue — pick the strongest one, not just the first one found.
+    let best = null;
+    for (const wc of wildcards) {
+      const others = cards.filter(c => c.id !== wc.id);
+      for (const substituteRank of RANK_ORDER) {
+        if (substituteRank === levelRank) continue;
+        const substituted = others.concat([{ rank: substituteRank, suit: wc.suit, id: wc.id }]);
+        const result = classifyPlain(substituted);
+        if (!result) continue;
+        const candidate = Object.assign({}, finalizeCompareValue(result, levelRank), { usedWildcardAs: substituteRank });
+        if (!best || candidate.compareValue > best.compareValue) {
+          best = candidate;
+        }
       }
     }
-    return null;
+    return best;
   }
 
   function compare(a, b) {
