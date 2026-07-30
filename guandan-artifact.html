@@ -17,25 +17,27 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 #trickArea { flex: 1; text-align: center; font-size: 1.1rem; min-height: 2em; }
 .card {
   display: inline-block;
-  min-width: 42px;
-  padding: 8px 6px;
-  margin: 2px;
+  min-width: 60px;
+  padding: 14px 10px;
+  margin: 3px;
   background: #fff;
   color: #222;
   border: 1px solid #999;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   font-weight: bold;
+  font-size: 1.5rem;
 }
-.card.selected { transform: translateY(-10px); border-color: #ffcc00; box-shadow: 0 0 6px #ffcc00; }
+.card.selected { transform: translateY(-14px); border-color: #ffcc00; box-shadow: 0 0 8px #ffcc00; }
 .playedCards {
-  min-height: 2em;
+  min-height: 2.4em;
   margin-top: 6px;
-  padding: 6px;
+  padding: 8px;
   background: rgba(255,255,255,0.08);
   border: 1px dashed rgba(255,255,255,0.3);
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 1.4rem;
+  font-weight: bold;
   color: #ffe680;
 }
 .playedCards:empty::before { content: '\00a0'; }
