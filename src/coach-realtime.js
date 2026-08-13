@@ -29,9 +29,19 @@
     }
 
     const label = describeCombo(decision.combo);
-    const rationale = decision.combo.isBomb
-      ? `手数已经不多，此时开炸弹（${label}）夺回主动权是合理的。` + Knowledge.cite('bomb_plan_ahead')
-      : `用最小的${label}拿下当前墩，既能压制对手又不浪费大牌，建议出这手牌。` + Knowledge.cite('weak_road_first');
+    let rationale;
+    if (!currentCombo) {
+      // Leading a fresh trick: there is no existing combo to "beat", so the
+      // rationale must not claim to be taking one (that was the bug -
+      // this branch used to reuse the follow-up wording verbatim).
+      rationale = decision.combo.isBomb
+        ? `手上暂时没有更小的牌可以先出，只能用炸弹（${label}）开局，出完之后要尽快找机会重新组织牌型。` + Knowledge.cite('bomb_plan_ahead')
+        : `这是新的一墩，由你领出——先出手上最小的${label}，把大牌留到后面再用。` + Knowledge.cite('weak_road_first');
+    } else {
+      rationale = decision.combo.isBomb
+        ? `手数已经不多，此时开炸弹（${label}）夺回主动权是合理的。` + Knowledge.cite('bomb_plan_ahead')
+        : `用最小的${label}拿下当前墩，既能压制对手又不浪费大牌，建议出这手牌。` + Knowledge.cite('weak_road_first');
+    }
     return { action: 'play', combo: decision.combo, rationale };
   }
 

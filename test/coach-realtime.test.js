@@ -25,4 +25,14 @@ test('suggests playing the smallest beating combo against an opponent, with a ra
   const suggestion = CoachRealtime.suggestPlay(hand, currentCombo, { selfIndex: 0, lastPlayerIndex: 1, levelRank: level });
   assert.equal(suggestion.action, 'play');
   assert.match(suggestion.rationale, /单张/);
+  assert.match(suggestion.rationale, /拿下当前墩/);
+});
+
+test('when leading a fresh trick (no current combo), the rationale says you are leading, not "taking" a nonexistent trick', () => {
+  const hand = [c('3', 'S', '1'), c('9', 'H', '2')];
+  const suggestion = CoachRealtime.suggestPlay(hand, null, { selfIndex: 1, lastPlayerIndex: null, levelRank: level });
+  assert.equal(suggestion.action, 'play');
+  assert.match(suggestion.rationale, /单张/);
+  assert.match(suggestion.rationale, /新的一墩，由你领出/);
+  assert.ok(!suggestion.rationale.includes('拿下当前墩'), 'leading rationale must not claim to take a trick that does not exist');
 });
