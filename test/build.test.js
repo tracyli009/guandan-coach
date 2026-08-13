@@ -15,7 +15,7 @@ test('build() produces guandan.html with title and no leftover placeholders', ()
   assert.ok(!html.includes('{{SCRIPTS}}'));
 });
 
-test('build() output attaches all 8 pure-logic modules to window.GD when module/require are absent (browser simulation)', () => {
+test('build() output attaches all 9 pure-logic modules to window.GD when module/require are absent (browser simulation)', () => {
   const { build } = require('../build.js');
   const html = build();
   const scriptBody = html.match(/<script>([\s\S]*)<\/script>/)[1];
@@ -23,7 +23,7 @@ test('build() output attaches all 8 pure-logic modules to window.GD when module/
   const sandbox = {};
   sandbox.window = sandbox;
   new Function('window', 'module', 'require', 'exports', pureLogicOnly)(sandbox, undefined, undefined, undefined);
-  const expected = ['Cards', 'Combos', 'Moves', 'Engine', 'AI', 'CoachRealtime', 'CoachReview', 'CoachHistory'];
+  const expected = ['Knowledge', 'Cards', 'Combos', 'Moves', 'Engine', 'AI', 'CoachRealtime', 'CoachReview', 'CoachHistory'];
   for (const name of expected) {
     assert.ok(sandbox.GD[name], `expected window.GD.${name} to be defined`);
   }

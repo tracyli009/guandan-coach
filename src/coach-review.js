@@ -1,9 +1,11 @@
 (function (root) {
   'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
 
   const PATTERN_INFO = {
-    takeover_from_partner: { label: '抢搭档的攻——不分牌好坏，都以自己为中心打牌', threshold: 2 },
-    early_bomb: { label: '炸弹用得太早——有大牌就炸，不顾团队节奏', threshold: 1 },
+    takeover_from_partner: { label: '抢搭档的攻——不分牌好坏，都以自己为中心打牌' + Knowledge.cite('partner_defer'), threshold: 2 },
+    early_bomb: { label: '炸弹用得太早——有大牌就炸，不顾团队节奏' + Knowledge.cite('bomb_is_tool'), threshold: 1 },
     unmatched_suggestion: { label: '与教练建议不符——配合默契还需打磨', threshold: 3 },
     passive_pass: { label: '过于保守——能接却选择等待，缺少主动出击', threshold: 2 }
   };

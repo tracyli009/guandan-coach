@@ -1,9 +1,11 @@
 (function (root) {
   'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
 
   const ARCHETYPES = {
-    takeover_from_partner: '强势型：习惯以自我为中心指挥牌局',
-    early_bomb: '急躁型：有勇无谋，炸弹用得太早',
+    takeover_from_partner: '强势型：习惯以自我为中心指挥牌局' + Knowledge.cite('partner_defer'),
+    early_bomb: '急躁型：有勇无谋，炸弹用得太早' + Knowledge.cite('bomb_is_tool'),
     unmatched_suggestion: '磨合型：与教练/搭档的默契仍在建立中',
     passive_pass: '谨慎型：谨小慎微，缺少主动出击的担当'
   };

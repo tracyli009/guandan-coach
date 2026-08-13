@@ -116,6 +116,55 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 (function (root) {
   'use strict';
 
+  // Curated verbatim from the project's own knowledge base, so the coach's
+  // rationale text quotes real source material instead of ad-hoc prose:
+  //   - AI掼蛋进阶_标准牌局输入格式_v1.0.md §19 「AI 掼蛋进阶核心原则」
+  //   - AI掼蛋教练_KnowledgeBase/00_AI教练使用说明.md 「推理纪律」
+  // Keys are stable identifiers used by coach-realtime.js / coach-review.js /
+  // coach-history.js to cite a specific principle; the string values are the
+  // exact wording from the source documents (not paraphrased).
+  const PRINCIPLES = {
+    partner_defer: '搭档顺时少抢牌',
+    opponent_break: '对手顺时优先打断',
+    weak_road_first: '先处理弱路，再炫耀强牌',
+    partner_before_self: '先看搭档，再看自己',
+    power_before_size: '先看牌权，再看牌大',
+    persistent_signal: '连续行为比单次行为更值得读牌',
+    absence_not_proof: '"没出过"不等于"没有"',
+    bomb_is_tool: '炸弹首先是牌权工具',
+    bomb_plan_ahead: '炸之前先想炸后出什么',
+    endgame_countdown: '剩十张左右开始倒推尾牌',
+    report_enumerate: '报牌后优先枚举可能牌型',
+    endgame_focus_threat: '残局集中防守最危险的玩家',
+    fact_infer_assume: '明确区分事实、推断和假设',
+    conditional_when_uncertain: '信息不足时给条件式建议，不装作确定',
+    one_lesson_per_hand: '每局只提炼一个最重要训练点'
+  };
+
+  const SOURCE = 'AI掼蛋进阶·标准牌局输入格式 v1.0 §19';
+
+  // Returns a short parenthetical citation like
+  // "（牌理：搭档顺时少抢牌 —— AI掼蛋进阶·标准牌局输入格式 v1.0 §19）"
+  // or '' if the key isn't a known principle (never throws, safe to inline).
+  function cite(key) {
+    const text = PRINCIPLES[key];
+    return text ? `（牌理：${text} —— ${SOURCE}）` : '';
+  }
+
+  const Knowledge = { PRINCIPLES, SOURCE, cite };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Knowledge;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.Knowledge = Knowledge;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+(function (root) {
+  'use strict';
+
   const RANK_ORDER = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
   const SUITS = ['S','H','D','C'];
 
@@ -633,6 +682,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
   'use strict';
   const isNode = typeof module !== 'undefined' && module.exports;
   const AI = isNode ? require('./ai.js') : root.GD.AI;
+  const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
 
   const CATEGORY_LABEL = {
     single: '单张', pair: '对子', triple: '三同张', triple_pair: '三带二',
@@ -653,15 +703,15 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 
     if (decision.action === 'pass') {
       const rationale = partnerIsWinning
-        ? '搭档正在领先，不接对门的牌，除非你能跑掉——建议过牌配合搭档。'
-        : '手上没有合适的牌可以拿下，且保留炸弹更有价值——建议过牌。';
+        ? '搭档正在领先，不接对门的牌，除非你能跑掉——建议过牌配合搭档。' + Knowledge.cite('partner_defer')
+        : '手上没有合适的牌可以拿下，且保留炸弹更有价值——建议过牌。' + Knowledge.cite('bomb_is_tool');
       return { action: 'pass', rationale };
     }
 
     const label = describeCombo(decision.combo);
     const rationale = decision.combo.isBomb
-      ? `手数已经不多，此时开炸弹（${label}）夺回主动权是合理的。`
-      : `用最小的${label}拿下当前墩，既能压制对手又不浪费大牌，建议出这手牌。`;
+      ? `手数已经不多，此时开炸弹（${label}）夺回主动权是合理的。` + Knowledge.cite('bomb_plan_ahead')
+      : `用最小的${label}拿下当前墩，既能压制对手又不浪费大牌，建议出这手牌。` + Knowledge.cite('weak_road_first');
     return { action: 'play', combo: decision.combo, rationale };
   }
 
@@ -678,10 +728,12 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 
 (function (root) {
   'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
 
   const PATTERN_INFO = {
-    takeover_from_partner: { label: '抢搭档的攻——不分牌好坏，都以自己为中心打牌', threshold: 2 },
-    early_bomb: { label: '炸弹用得太早——有大牌就炸，不顾团队节奏', threshold: 1 },
+    takeover_from_partner: { label: '抢搭档的攻——不分牌好坏，都以自己为中心打牌' + Knowledge.cite('partner_defer'), threshold: 2 },
+    early_bomb: { label: '炸弹用得太早——有大牌就炸，不顾团队节奏' + Knowledge.cite('bomb_is_tool'), threshold: 1 },
     unmatched_suggestion: { label: '与教练建议不符——配合默契还需打磨', threshold: 3 },
     passive_pass: { label: '过于保守——能接却选择等待，缺少主动出击', threshold: 2 }
   };
@@ -720,10 +772,12 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 
 (function (root) {
   'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
 
   const ARCHETYPES = {
-    takeover_from_partner: '强势型：习惯以自我为中心指挥牌局',
-    early_bomb: '急躁型：有勇无谋，炸弹用得太早',
+    takeover_from_partner: '强势型：习惯以自我为中心指挥牌局' + Knowledge.cite('partner_defer'),
+    early_bomb: '急躁型：有勇无谋，炸弹用得太早' + Knowledge.cite('bomb_is_tool'),
     unmatched_suggestion: '磨合型：与教练/搭档的默契仍在建立中',
     passive_pass: '谨慎型：谨小慎微，缺少主动出击的担当'
   };
