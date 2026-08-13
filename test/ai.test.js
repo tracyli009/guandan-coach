@@ -45,6 +45,26 @@ test('leads with the smallest available combo when there is no current combo', (
   assert.equal(decision.combo.compareValue, 1); // single '3'
 });
 
+test('when leading, does not break up a same-rank 4-stack (a bomb in waiting) just because it is the lowest rank held', () => {
+  const hand = [
+    c('3', 'S', '1'), c('3', 'H', '2'), c('3', 'D', '3'), c('3', 'C', '4'), // 4x '3' - bomb-eligible
+    c('6', 'S', '5'), c('6', 'H', '6'), c('6', 'D', '7'),                  // triple '6'
+    c('9', 'S', '8')                                                       // lone '9'
+  ];
+  const decision = AI.chooseAiPlay(hand, null, { selfIndex: 0, lastPlayerIndex: null, levelRank: level });
+  assert.equal(decision.action, 'play');
+  assert.equal(decision.combo.cards[0].rank, '6', 'should lead with the 6, not cannibalize the 4x3 bomb-in-waiting');
+});
+
+test('when leading and every rank is bomb-eligible, falls back to breaking one rather than passing', () => {
+  const hand = [
+    c('3', 'S', '1'), c('3', 'H', '2'), c('3', 'D', '3'), c('3', 'C', '4')
+  ];
+  const decision = AI.chooseAiPlay(hand, null, { selfIndex: 0, lastPlayerIndex: null, levelRank: level });
+  assert.equal(decision.action, 'play');
+  assert.equal(decision.combo.cards[0].rank, '3');
+});
+
 test('leading with a heterogeneous hand (singles and pairs both available) does not throw and picks a sane smallest option', () => {
   const hand = [
     c('3', 'S', '1'), c('3', 'H', '2'),
