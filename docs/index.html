@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>掼蛋教练 MVP</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #0b3d2e;
+  color: #f2f2f2;
+  margin: 0;
+  padding: 16px;
+}
+h1 { font-size: 1.4rem; margin: 0 0 8px; }
+#app { max-width: 960px; margin: 0 auto; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+#table { background: #0f5132; border-radius: 12px; padding: 16px; }
+.seat { text-align: center; margin: 8px 0; }
+.middle-row { display: flex; justify-content: space-between; align-items: center; }
+#trickArea { flex: 1; text-align: center; font-size: 1.1rem; min-height: 2em; }
+.card {
+  display: inline-block;
+  min-width: 58px;
+  padding: 12px 8px;
+  margin: 2px;
+  background: #fff;
+  color: #222;
+  border: 1px solid #999;
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 1.35rem;
+}
+.card.selected { transform: translateY(-12px); border-color: #ffcc00; box-shadow: 0 0 8px #ffcc00; }
+.playedCards {
+  min-height: 2.4em;
+  margin-top: 6px;
+  padding: 8px;
+  background: rgba(255,255,255,0.08);
+  border: 1px dashed rgba(255,255,255,0.3);
+  border-radius: 6px;
+  font-size: 1.4rem;
+  font-weight: bold;
+  color: #ffe680;
+}
+.playedCards:empty::before { content: '\00a0'; }
+#controls { margin-top: 8px; }
+#controls button, #reviewModal button {
+  padding: 8px 16px; margin-right: 8px; border-radius: 6px; border: none; cursor: pointer; font-size: 1rem;
+}
+#btnPlay { background: #ffcc00; }
+#btnPass { background: #ccc; }
+#coachPanel, #historyPanel {
+  background: #1b1b1b; color: #f2f2f2; border-radius: 8px; padding: 12px; margin-top: 12px;
+}
+#reviewModal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; }
+#reviewModal.hidden { display: none; }
+.modalBox { background: #fff; color: #222; padding: 24px; border-radius: 12px; max-width: 480px; width: 90%; }
+
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>掼蛋教练 MVP</h1>
+    <div id="levelIndicator"></div>
+  </header>
+  <section id="table">
+    <div class="seat" id="seat-2">
+      <h3>对家 (北)</h3>
+      <div class="handCount" id="count-2"></div>
+      <div class="playedCards" id="played-2"></div>
+    </div>
+    <div class="middle-row">
+      <div class="seat" id="seat-1">
+        <h3>右家 (东)</h3>
+        <div class="handCount" id="count-1"></div>
+        <div class="playedCards" id="played-1"></div>
+      </div>
+      <div id="trickArea"></div>
+      <div class="seat" id="seat-3">
+        <h3>左家 (西)</h3>
+        <div class="handCount" id="count-3"></div>
+        <div class="playedCards" id="played-3"></div>
+      </div>
+    </div>
+    <div class="seat" id="seat-0">
+      <h3>你 (南)</h3>
+      <div class="playedCards" id="played-0"></div>
+      <div id="hand-0"></div>
+      <div id="controls">
+        <button id="btnPlay">出牌</button>
+        <button id="btnPass">过牌</button>
+      </div>
+    </div>
+  </section>
+  <aside id="coachPanel">
+    <h3>教练建议（第一层：实时出牌建议）</h3>
+    <div id="coachSuggestion"></div>
+  </aside>
+  <section id="historyPanel">
+    <h3>成长追踪（第三层：长期成长追踪）</h3>
+    <div id="historyContent"></div>
+  </section>
+</div>
+<div id="reviewModal" class="hidden">
+  <div class="modalBox">
+    <h2>本局复盘（第二层：局后复盘）</h2>
+    <div id="reviewContent"></div>
+    <button id="btnCloseReview">关闭</button>
+    <button id="btnNextHand">开始下一局</button>
+  </div>
+</div>
+<script>
+(function (root) {
+  'use strict';
+
+  // Curated verbatim from the project's own knowledge base, so the coach's
+  // rationale text quotes real source material instead of ad-hoc prose:
+  //   - AI掼蛋进阶_标准牌局输入格式_v1.0.md §19 「AI 掼蛋进阶核心原则」
+  //   - AI掼蛋教练_KnowledgeBase/00_AI教练使用说明.md 「推理纪律」
+  // Keys are stable identifiers used by coach-realtime.js / coach-review.js /
+  // coach-history.js to cite a specific principle; the string values are the
+  // exact wording from the source documents (not paraphrased).
+  const PRINCIPLES = {
+    partner_defer: '搭档顺时少抢牌',
+    opponent_break: '对手顺时优先打断',
+    weak_road_first: '先处理弱路，再炫耀强牌',
+    partner_before_self: '先看搭档，再看自己',
+    power_before_size: '先看牌权，再看牌大',
+    persistent_signal: '连续行为比单次行为更值得读牌',
+    absence_not_proof: '"没出过"不等于"没有"',
+    bomb_is_tool: '炸弹首先是牌权工具',
+    bomb_plan_ahead: '炸之前先想炸后出什么',
+    endgame_countdown: '剩十张左右开始倒推尾牌',
+    report_enumerate: '报牌后优先枚举可能牌型',
+    endgame_focus_threat: '残局集中防守最危险的玩家',
+    fact_infer_assume: '明确区分事实、推断和假设',
+    conditional_when_uncertain: '信息不足时给条件式建议，不装作确定',
+    one_lesson_per_hand: '每局只提炼一个最重要训练点'
+  };
+
+  const SOURCE = 'AI掼蛋进阶·标准牌局输入格式 v1.0 §19';
+
+  // Returns a short parenthetical citation like
+  // "（牌理：搭档顺时少抢牌 —— AI掼蛋进阶·标准牌局输入格式 v1.0 §19）"
+  // or '' if the key isn't a known principle (never throws, safe to inline).
+  function cite(key) {
+    const text = PRINCIPLES[key];
+    return text ? `（牌理：${text} —— ${SOURCE}）` : '';
+  }
+
+  const Knowledge = { PRINCIPLES, SOURCE, cite };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Knowledge;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.Knowledge = Knowledge;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+(function (root) {
+  'use strict';
+
+  const RANK_ORDER = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const SUITS = ['S','H','D','C'];
+
+  function naturalIndex(rank) {
+    return RANK_ORDER.indexOf(rank);
+  }
+
+  function rankValue(rank, levelRank) {
+    if (rank === 'BJ') return 15;
+    if (rank === 'SJ') return 14;
+    if (rank === levelRank) return 13;
+    return naturalIndex(rank);
+  }
+
+  function isWildcard(card, levelRank) {
+    return card.rank === levelRank && card.suit === 'H';
+  }
+
+  function createDeck() {
+    const deck = [];
+    for (let copy = 0; copy < 2; copy++) {
+      for (const rank of RANK_ORDER) {
+        for (const suit of SUITS) {
+          deck.push({ rank, suit, id: `${rank}${suit}_${copy}` });
+        }
+      }
+      deck.push({ rank: 'SJ', suit: null, id: `SJ_${copy}` });
+      deck.push({ rank: 'BJ', suit: null, id: `BJ_${copy}` });
+    }
+    return deck;
+  }
+
+  function shuffle(deck, rng) {
+    const arr = deck.slice();
+    const random = rng || Math.random;
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function deal(deck) {
+    if (deck.length !== 108) throw new Error('deck must have 108 cards');
+    const hands = [[], [], [], []];
+    for (let i = 0; i < deck.length; i++) {
+      hands[i % 4].push(deck[i]);
+    }
+    return hands;
+  }
+
+  function sortHand(hand, levelRank) {
+    return hand.slice().sort((a, b) => rankValue(a.rank, levelRank) - rankValue(b.rank, levelRank));
+  }
+
+  const Cards = { RANK_ORDER, SUITS, naturalIndex, rankValue, isWildcard, createDeck, shuffle, deal, sortHand };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Cards;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.Cards = Cards;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+(function (root) {
+  'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Cards = isNode ? require('./cards.js') : root.GD.Cards;
+
+  const RANK_ORDER = Cards.RANK_ORDER;
+
+  function naturalSeqIndexForStraight(rank, position) {
+    if (rank === 'A' && position === 'low') return -1;
+    return Cards.naturalIndex(rank);
+  }
+
+  function groupByRank(cards) {
+    const map = new Map();
+    for (const c of cards) {
+      if (!map.has(c.rank)) map.set(c.rank, []);
+      map.get(c.rank).push(c);
+    }
+    return map;
+  }
+
+  function tryStraightLike(cards, runLength, groupSize) {
+    const groups = groupByRank(cards);
+    const ranks = [...groups.keys()];
+    if (ranks.some(r => r === 'SJ' || r === 'BJ')) return null;
+    if (ranks.length !== runLength) return null;
+    for (const r of ranks) {
+      if (groups.get(r).length !== groupSize) return null;
+    }
+    for (const position of ['low', 'high']) {
+      const indices = ranks.map(r => naturalSeqIndexForStraight(r, position)).sort((a, b) => a - b);
+      let consecutive = true;
+      for (let i = 1; i < indices.length; i++) {
+        if (indices[i] !== indices[i - 1] + 1) { consecutive = false; break; }
+      }
+      if (consecutive) return { topIndex: indices[indices.length - 1] };
+    }
+    return null;
+  }
+
+  function classifyPlain(cards) {
+    const n = cards.length;
+    const groups = groupByRank(cards);
+    const rankList = [...groups.keys()];
+
+    if (n === 1) {
+      return { category: 'single', length: 1, faceRank: cards[0].rank, isBomb: false };
+    }
+    if (n === 2 && rankList.length === 1) {
+      return { category: 'pair', length: 2, faceRank: rankList[0], isBomb: false };
+    }
+    if (n === 3 && rankList.length === 1) {
+      return { category: 'triple', length: 3, faceRank: rankList[0], isBomb: false };
+    }
+    if (n === 4 && rankList.length === 1) {
+      return { category: 'bomb', length: 4, compareValue: Cards.naturalIndex(rankList[0]), isBomb: true, bombSubtype: 'plain' };
+    }
+    if (n === 4) {
+      const jokerCount = cards.filter(c => c.rank === 'SJ' || c.rank === 'BJ').length;
+      if (jokerCount === 4) {
+        return { category: 'bomb', length: 4, compareValue: 0, isBomb: true, bombSubtype: 'joker' };
+      }
+    }
+    if (n === 5 && rankList.length === 2) {
+      const triple = rankList.find(r => groups.get(r).length === 3);
+      const pair = rankList.find(r => groups.get(r).length === 2);
+      if (triple && pair) {
+        return { category: 'triple_pair', length: 5, faceRank: triple, isBomb: false };
+      }
+    }
+    if (n === 5) {
+      const straight = tryStraightLike(cards, 5, 1);
+      if (straight) {
+        const suits = new Set(cards.map(c => c.suit));
+        if (suits.size === 1) {
+          return { category: 'bomb', length: 5, compareValue: straight.topIndex, isBomb: true, bombSubtype: 'straight_flush' };
+        }
+        return { category: 'straight', length: 5, compareValue: straight.topIndex, isBomb: false };
+      }
+    }
+    if (n === 5 && rankList.length === 1) {
+      return { category: 'bomb', length: 5, compareValue: Cards.naturalIndex(rankList[0]), isBomb: true, bombSubtype: 'plain' };
+    }
+    if (n === 6) {
+      const plate = tryStraightLike(cards, 2, 3);
+      if (plate) return { category: 'plate', length: 6, compareValue: plate.topIndex, isBomb: false };
+      const pairStraight = tryStraightLike(cards, 3, 2);
+      if (pairStraight) return { category: 'pair_straight', length: 6, compareValue: pairStraight.topIndex, isBomb: false };
+      if (rankList.length === 1) {
+        return { category: 'bomb', length: 6, compareValue: Cards.naturalIndex(rankList[0]), isBomb: true, bombSubtype: 'plain' };
+      }
+    }
+    if ((n === 7 || n === 8) && rankList.length === 1) {
+      return { category: 'bomb', length: n, compareValue: Cards.naturalIndex(rankList[0]), isBomb: true, bombSubtype: 'plain' };
+    }
+    return null;
+  }
+
+  function finalizeCompareValue(result, levelRank) {
+    if (result.compareValue !== undefined) return result;
+    return Object.assign({}, result, { compareValue: Cards.rankValue(result.faceRank, levelRank) });
+  }
+
+  const BOMB_TIER = { 4: 1, 5: 2, straight_flush: 3, 6: 4, 7: 5, 8: 6, joker: 7 };
+
+  function bombTier(combo) {
+    if (combo.bombSubtype === 'joker') return BOMB_TIER.joker;
+    if (combo.bombSubtype === 'straight_flush') return BOMB_TIER.straight_flush;
+    return BOMB_TIER[combo.length];
+  }
+
+  function classify(cards, levelRank) {
+    if (!cards || cards.length === 0) return null;
+
+    // A fixed card selection has one achievable shape (category+length); a
+    // wildcard card only resolves which rank fills one slot within that
+    // shape (whether left at its own natural rank, i.e. "direct", or
+    // substituted for a different rank), so every valid interpretation
+    // found below is safely comparable by raw compareValue — always keep
+    // the strongest one, never short-circuit on the first one found.
+    let best = null;
+    const direct = classifyPlain(cards);
+    if (direct) {
+      best = finalizeCompareValue(direct, levelRank);
+    }
+
+    const wildcards = cards.filter(c => Cards.isWildcard(c, levelRank));
+    for (const wc of wildcards) {
+      const others = cards.filter(c => c.id !== wc.id);
+      for (const substituteRank of RANK_ORDER) {
+        if (substituteRank === levelRank) continue;
+        const substituted = others.concat([{ rank: substituteRank, suit: wc.suit, id: wc.id }]);
+        const result = classifyPlain(substituted);
+        if (!result) continue;
+        const candidate = Object.assign({}, finalizeCompareValue(result, levelRank), { usedWildcardAs: substituteRank });
+        if (!best || candidate.compareValue > best.compareValue) {
+          best = candidate;
+        }
+      }
+    }
+    return best;
+  }
+
+  function compare(a, b) {
+    if (!a.isBomb && !b.isBomb) {
+      if (a.category !== b.category || a.length !== b.length) {
+        throw new Error('cannot compare combos of different category/length');
+      }
+      return a.compareValue - b.compareValue;
+    }
+    if (a.isBomb && !b.isBomb) return 1;
+    if (!a.isBomb && b.isBomb) return -1;
+    const tierA = bombTier(a);
+    const tierB = bombTier(b);
+    if (tierA !== tierB) return tierA - tierB;
+    return a.compareValue - b.compareValue;
+  }
+
+  const Combos = { classify, compare, bombTier };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Combos;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.Combos = Combos;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+(function (root) {
+  'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Cards = isNode ? require('./cards.js') : root.GD.Cards;
+  const Combos = isNode ? require('./combos.js') : root.GD.Combos;
+
+  function groupByRank(hand) {
+    const map = new Map();
+    for (const c of hand) {
+      if (!map.has(c.rank)) map.set(c.rank, []);
+      map.get(c.rank).push(c);
+    }
+    return map;
+  }
+
+  function candidateLeads(hand, levelRank) {
+    const candidates = [];
+    const groups = groupByRank(hand);
+    const ranks = [...groups.keys()];
+
+    for (const r of ranks) candidates.push([groups.get(r)[0]]);
+    for (const r of ranks) if (groups.get(r).length >= 2) candidates.push(groups.get(r).slice(0, 2));
+    for (const r of ranks) if (groups.get(r).length >= 3) candidates.push(groups.get(r).slice(0, 3));
+
+    for (const r of ranks) {
+      if (groups.get(r).length >= 3) {
+        for (const r2 of ranks) {
+          if (r2 !== r && groups.get(r2).length >= 2) {
+            candidates.push(groups.get(r).slice(0, 3).concat(groups.get(r2).slice(0, 2)));
+          }
+        }
+      }
+    }
+
+    const naturalRanks = Cards.RANK_ORDER;
+    for (let start = 0; start + 5 <= naturalRanks.length; start++) {
+      const windowRanks = naturalRanks.slice(start, start + 5);
+      if (windowRanks.every(r => groups.has(r))) {
+        candidates.push(windowRanks.map(r => groups.get(r)[0]));
+      }
+    }
+    for (let start = 0; start + 2 <= naturalRanks.length; start++) {
+      const windowRanks = naturalRanks.slice(start, start + 2);
+      if (windowRanks.every(r => groups.has(r) && groups.get(r).length >= 3)) {
+        candidates.push(windowRanks.flatMap(r => groups.get(r).slice(0, 3)));
+      }
+    }
+    for (let start = 0; start + 3 <= naturalRanks.length; start++) {
+      const windowRanks = naturalRanks.slice(start, start + 3);
+      if (windowRanks.every(r => groups.has(r) && groups.get(r).length >= 2)) {
+        candidates.push(windowRanks.flatMap(r => groups.get(r).slice(0, 2)));
+      }
+    }
+    for (const r of ranks) {
+      for (let size = 4; size <= Math.min(8, groups.get(r).length); size++) {
+        candidates.push(groups.get(r).slice(0, size));
+      }
+    }
+    const sj = hand.filter(c => c.rank === 'SJ');
+    const bj = hand.filter(c => c.rank === 'BJ');
+    if (sj.length >= 2 && bj.length >= 2) candidates.push([sj[0], sj[1], bj[0], bj[1]]);
+
+    const classified = [];
+    for (const cardsSel of candidates) {
+      const combo = Combos.classify(cardsSel, levelRank);
+      if (combo) classified.push(Object.assign({}, combo, { cards: cardsSel }));
+    }
+    return classified;
+  }
+
+  function legalPlays(hand, currentCombo, levelRank) {
+    const leads = candidateLeads(hand, levelRank);
+    if (!currentCombo) return leads;
+    return leads.filter(combo => {
+      if (combo.isBomb) {
+        if (!currentCombo.isBomb) return true;
+        return Combos.compare(combo, currentCombo) > 0;
+      }
+      if (currentCombo.isBomb) return false;
+      if (combo.category !== currentCombo.category || combo.length !== currentCombo.length) return false;
+      return Combos.compare(combo, currentCombo) > 0;
+    });
+  }
+
+  const Moves = { candidateLeads, legalPlays };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Moves;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.Moves = Moves;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+(function (root) {
+  'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Cards = isNode ? require('./cards.js') : root.GD.Cards;
+  const Combos = isNode ? require('./combos.js') : root.GD.Combos;
+
+  const TEAM_OF = { 0: 0, 1: 1, 2: 0, 3: 1 };
+
+  function startRound(levelRank, rng) {
+    const deck = Cards.shuffle(Cards.createDeck(), rng);
+    const hands = Cards.deal(deck).map(h => Cards.sortHand(h, levelRank));
+    return {
+      levelRank, hands, currentLeader: 0, currentTurn: 0, currentCombo: null,
+      lastPlayerIndex: null, passStreak: 0, finishedOrder: [], history: []
+    };
+  }
+
+  function isFinished(state, playerIndex) {
+    return state.finishedOrder.includes(playerIndex);
+  }
+
+  function nextActivePlayer(state, fromIndex) {
+    let idx = fromIndex;
+    for (let i = 0; i < 4; i++) {
+      idx = (idx + 1) % 4;
+      if (!isFinished(state, idx)) return idx;
+    }
+    return null;
+  }
+
+  function activePlayerCount(state) {
+    return 4 - state.finishedOrder.length;
+  }
+
+  function playCombo(state, playerIndex, cards) {
+    if (playerIndex !== state.currentTurn) return { error: 'not your turn' };
+    if (isFinished(state, playerIndex)) return { error: 'player already finished' };
+    const hand = state.hands[playerIndex];
+    const handIds = new Set(hand.map(c => c.id));
+    if (!cards.every(c => handIds.has(c.id))) return { error: 'cards not in hand' };
+
+    const combo = Combos.classify(cards, state.levelRank);
+    if (!combo) return { error: 'invalid combo' };
+
+    if (state.currentCombo) {
+      const cur = state.currentCombo;
+      const beatsBomb = combo.isBomb && !cur.isBomb;
+      const sameCategory = combo.category === cur.category && combo.length === cur.length;
+      const beatsSameCategory = sameCategory && Combos.compare(combo, cur) > 0;
+      const beatsHigherBomb = combo.isBomb && cur.isBomb && Combos.compare(combo, cur) > 0;
+      if (!beatsBomb && !beatsSameCategory && !beatsHigherBomb) {
+        return { error: 'combo does not beat current combo' };
+      }
+    }
+
+    state.hands[playerIndex] = hand.filter(c => !cards.some(pc => pc.id === c.id));
+    state.currentCombo = combo;
+    state.lastPlayerIndex = playerIndex;
+    state.passStreak = 0;
+    state.history.push({ playerIndex, cards, combo });
+
+    if (state.hands[playerIndex].length === 0) {
+      state.finishedOrder.push(playerIndex);
+    }
+
+    advanceTurnAfterPlay(state);
+    return { ok: true, roundOver: state.finishedOrder.length >= 3 };
+  }
+
+  function pass(state, playerIndex) {
+    if (playerIndex !== state.currentTurn) return { error: 'not your turn' };
+    if (!state.currentCombo) return { error: 'cannot pass when leading' };
+    state.passStreak++;
+    state.history.push({ playerIndex, cards: [], combo: null });
+    advanceTurnAfterPass(state);
+    return { ok: true };
+  }
+
+  function advanceTurnAfterPlay(state) {
+    if (state.finishedOrder.length >= 3) { state.currentTurn = null; return; }
+    const remainingOthers = activePlayerCount(state) - (isFinished(state, state.lastPlayerIndex) ? 0 : 1);
+    if (remainingOthers <= 0) {
+      state.currentCombo = null;
+      state.passStreak = 0;
+      state.currentLeader = isFinished(state, state.lastPlayerIndex)
+        ? nextActivePlayer(state, state.lastPlayerIndex)
+        : state.lastPlayerIndex;
+      state.currentTurn = state.currentLeader;
+      return;
+    }
+    state.currentTurn = nextActivePlayer(state, state.lastPlayerIndex);
+  }
+
+  function advanceTurnAfterPass(state) {
+    const remainingOthers = activePlayerCount(state) - (isFinished(state, state.lastPlayerIndex) ? 0 : 1);
+    if (state.passStreak >= remainingOthers) {
+      state.currentCombo = null;
+      state.passStreak = 0;
+      state.currentLeader = isFinished(state, state.lastPlayerIndex)
+        ? nextActivePlayer(state, state.lastPlayerIndex)
+        : state.lastPlayerIndex;
+      state.currentTurn = state.currentLeader;
+      return;
+    }
+    state.currentTurn = nextActivePlayer(state, state.currentTurn);
+  }
+
+  function teamLevelGain(finishedOrder) {
+    const teams = finishedOrder.map(p => TEAM_OF[p]);
+    const winningTeam = teams[0];
+    const idx = teams.indexOf(winningTeam, 1);
+    if (idx === 1) return { team: winningTeam, gain: 3 };
+    if (idx === 2) return { team: winningTeam, gain: 2 };
+    return { team: winningTeam, gain: 1 };
+  }
+
+  const Engine = { TEAM_OF, startRound, playCombo, pass, isFinished, nextActivePlayer, teamLevelGain };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = Engine;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.Engine = Engine;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+(function (root) {
+  'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Moves = isNode ? require('./moves.js') : root.GD.Moves;
+  const Combos = isNode ? require('./combos.js') : root.GD.Combos;
+
+  const TEAM_OF = { 0: 0, 1: 1, 2: 0, 3: 1 };
+
+  function chooseAiPlay(hand, currentCombo, context) {
+    const { selfIndex, lastPlayerIndex, levelRank } = context;
+    const options = Moves.legalPlays(hand, currentCombo, levelRank);
+
+    if (!currentCombo) {
+      if (options.length === 0) return { action: 'pass' };
+      // candidateLeads mixes every category/length together, and Combos.compare only
+      // supports comparing two combos of the SAME category/length. Comparing raw
+      // compareValue avoids that crash, and never leads with a bomb unless a bomb is
+      // literally the only selection available (never happens in practice, since a
+      // single is always a valid lead whenever the hand is non-empty).
+      const nonBombLeads = options.filter(o => !o.isBomb);
+      const pool = nonBombLeads.length > 0 ? nonBombLeads : options;
+      const smallest = pool.reduce((a, b) => (a.compareValue <= b.compareValue ? a : b));
+      return { action: 'play', combo: smallest };
+    }
+
+    const partnerIsWinning = lastPlayerIndex !== null && TEAM_OF[lastPlayerIndex] === TEAM_OF[selfIndex];
+    if (partnerIsWinning) {
+      return { action: 'pass' };
+    }
+
+    const nonBombOptions = options.filter(o => !o.isBomb);
+    if (nonBombOptions.length > 0) {
+      const smallest = nonBombOptions.reduce((a, b) => (Combos.compare(a, b) < 0 ? a : b));
+      return { action: 'play', combo: smallest };
+    }
+
+    const bombOptions = options.filter(o => o.isBomb);
+    if (bombOptions.length > 0 && hand.length <= 6) {
+      const smallest = bombOptions.reduce((a, b) => (Combos.compare(a, b) < 0 ? a : b));
+      return { action: 'play', combo: smallest };
+    }
+
+    return { action: 'pass' };
+  }
+
+  const AI = { chooseAiPlay };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = AI;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.AI = AI;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+(function (root) {
+  'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const AI = isNode ? require('./ai.js') : root.GD.AI;
+  const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
+
+  const CATEGORY_LABEL = {
+    single: '单张', pair: '对子', triple: '三同张', triple_pair: '三带二',
+    straight: '顺子', plate: '钢板', pair_straight: '三连对', bomb: '炸弹'
+  };
+
+  function describeCombo(combo) {
+    if (!combo) return '过牌';
+    return CATEGORY_LABEL[combo.category] || combo.category;
+  }
+
+  const TEAM_OF = { 0: 0, 1: 1, 2: 0, 3: 1 };
+
+  function suggestPlay(hand, currentCombo, context) {
+    const decision = AI.chooseAiPlay(hand, currentCombo, context);
+    const { lastPlayerIndex, selfIndex } = context;
+    const partnerIsWinning = !!(currentCombo && lastPlayerIndex !== null && TEAM_OF[lastPlayerIndex] === TEAM_OF[selfIndex]);
+
+    if (decision.action === 'pass') {
+      const rationale = partnerIsWinning
+        ? '搭档正在领先，不接对门的牌，除非你能跑掉——建议过牌配合搭档。' + Knowledge.cite('partner_defer')
+        : '手上没有合适的牌可以拿下，且保留炸弹更有价值——建议过牌。' + Knowledge.cite('bomb_is_tool');
+      return { action: 'pass', rationale };
+    }
+
+    const label = describeCombo(decision.combo);
+    const rationale = decision.combo.isBomb
+      ? `手数已经不多，此时开炸弹（${label}）夺回主动权是合理的。` + Knowledge.cite('bomb_plan_ahead')
+      : `用最小的${label}拿下当前墩，既能压制对手又不浪费大牌，建议出这手牌。` + Knowledge.cite('weak_road_first');
+    return { action: 'play', combo: decision.combo, rationale };
+  }
+
+  const CoachRealtime = { suggestPlay, describeCombo };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = CoachRealtime;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.CoachRealtime = CoachRealtime;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+(function (root) {
+  'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
+
+  const PATTERN_INFO = {
+    takeover_from_partner: { label: '抢搭档的攻——不分牌好坏，都以自己为中心打牌' + Knowledge.cite('partner_defer'), threshold: 2 },
+    early_bomb: { label: '炸弹用得太早——有大牌就炸，不顾团队节奏' + Knowledge.cite('bomb_is_tool'), threshold: 1 },
+    unmatched_suggestion: { label: '与教练建议不符——配合默契还需打磨', threshold: 3 },
+    passive_pass: { label: '过于保守——能接却选择等待，缺少主动出击', threshold: 2 }
+  };
+
+  function reviewHand(moveLog) {
+    const counts = { takeover_from_partner: 0, early_bomb: 0, unmatched_suggestion: 0, passive_pass: 0 };
+
+    for (const entry of moveLog) {
+      if (entry.action === 'play' && entry.partnerWasWinning) counts.takeover_from_partner++;
+      if (entry.action === 'play' && entry.comboIsBomb && entry.handSizeBefore > 8) counts.early_bomb++;
+      if (!entry.matchedSuggestion) counts.unmatched_suggestion++;
+      if (entry.action === 'pass' && !entry.partnerWasWinning && entry.hadBeatingOptionNonBomb) counts.passive_pass++;
+    }
+
+    const patterns = Object.keys(counts)
+      .filter(key => counts[key] >= PATTERN_INFO[key].threshold)
+      .map(key => ({ key, label: PATTERN_INFO[key].label, count: counts[key] }));
+
+    const totalMoves = moveLog.length || 1;
+    const matchedCount = moveLog.filter(e => e.matchedSuggestion).length;
+    const cooperationScore = Math.round((matchedCount / totalMoves) * 100);
+
+    return { cooperationScore, counts, patterns };
+  }
+
+  const CoachReview = { reviewHand, PATTERN_INFO };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = CoachReview;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.CoachReview = CoachReview;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+(function (root) {
+  'use strict';
+  const isNode = typeof module !== 'undefined' && module.exports;
+  const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
+
+  const ARCHETYPES = {
+    takeover_from_partner: '强势型：习惯以自我为中心指挥牌局' + Knowledge.cite('partner_defer'),
+    early_bomb: '急躁型：有勇无谋，炸弹用得太早' + Knowledge.cite('bomb_is_tool'),
+    unmatched_suggestion: '磨合型：与教练/搭档的默契仍在建立中',
+    passive_pass: '谨慎型：谨小慎微，缺少主动出击的担当'
+  };
+
+  function summarizeHistory(records) {
+    if (!records || records.length === 0) {
+      return { gamesPlayed: 0, averageCooperationScore: 0, patternFrequency: {}, dominantArchetype: null, trend: [] };
+    }
+    const gamesPlayed = records.length;
+    const averageCooperationScore = Math.round(
+      records.reduce((sum, r) => sum + r.cooperationScore, 0) / gamesPlayed
+    );
+    const patternFrequency = {};
+    for (const r of records) {
+      for (const p of r.patterns) {
+        patternFrequency[p.key] = (patternFrequency[p.key] || 0) + 1;
+      }
+    }
+    let dominantArchetype = null;
+    const entries = Object.entries(patternFrequency);
+    if (entries.length > 0) {
+      entries.sort((a, b) => b[1] - a[1]);
+      dominantArchetype = ARCHETYPES[entries[0][0]] || null;
+    }
+    const trend = records.map(r => r.cooperationScore);
+    return { gamesPlayed, averageCooperationScore, patternFrequency, dominantArchetype, trend };
+  }
+
+  const CoachHistory = { summarizeHistory, ARCHETYPES };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = CoachHistory;
+  } else {
+    root.GD = root.GD || {};
+    root.GD.CoachHistory = CoachHistory;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
+
+/* UI_BOUNDARY */
+(function () {
+  'use strict';
+  const { Engine, Combos, Moves, AI, CoachRealtime, CoachReview, CoachHistory } = window.GD;
+
+  const HISTORY_KEY = 'guandan_coach_history_v1';
+  const SUIT_SYMBOL = { S: '♠️', H: '♥️', D: '♦️', C: '♣️' };
+  const SEAT_LABEL = { 1: '右家', 2: '对家', 3: '左家' };
+
+  let state = null;
+  let selectedIds = new Set();
+  let moveLog = [];
+  let trickPlays = { 0: null, 1: null, 2: null, 3: null };
+  const levelRank = '2';
+  const BOT_MOVE_DELAY_MS = 1500;
+
+  function loadHistory() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(HISTORY_KEY));
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(r => r && typeof r.cooperationScore === 'number' && Array.isArray(r.patterns));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveHistoryRecord(record) {
+    const history = loadHistory();
+    history.push(record);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  }
+
+  function cardLabel(card) {
+    if (card.rank === 'SJ') return '小王';
+    if (card.rank === 'BJ') return '大王';
+    return `${card.rank}${SUIT_SYMBOL[card.suit]}`;
+  }
+
+  function currentLegalNonBombCheck() {
+    return Moves.legalPlays(state.hands[0], state.currentCombo, levelRank).some(c => !c.isBomb);
+  }
+
+  function currentSuggestion() {
+    return CoachRealtime.suggestPlay(state.hands[0], state.currentCombo, {
+      selfIndex: 0, lastPlayerIndex: state.lastPlayerIndex, levelRank
+    });
+  }
+
+  function recordTrickAction(seat, cards, isPass) {
+    if (state.currentCombo) {
+      trickPlays[seat] = { cards: cards ? cards.slice() : [], isPass: !!isPass };
+    } else {
+      trickPlays = { 0: null, 1: null, 2: null, 3: null };
+    }
+  }
+
+  function renderPlayedCards(seat) {
+    const el = document.getElementById(`played-${seat}`);
+    const entry = trickPlays[seat];
+    if (!entry) { el.textContent = ''; return; }
+    el.textContent = entry.isPass ? '过' : entry.cards.map(cardLabel).join(' ');
+  }
+
+  function render() {
+    document.getElementById('levelIndicator').textContent = `当前级牌：${levelRank}`;
+    [1, 2, 3].forEach(seat => {
+      document.getElementById(`count-${seat}`).textContent = `剩余 ${state.hands[seat].length} 张`;
+    });
+
+    const handDiv = document.getElementById('hand-0');
+    handDiv.innerHTML = '';
+    for (const card of state.hands[0]) {
+      const btn = document.createElement('button');
+      btn.className = 'card' + (selectedIds.has(card.id) ? ' selected' : '');
+      btn.textContent = cardLabel(card);
+      btn.onclick = () => {
+        if (selectedIds.has(card.id)) selectedIds.delete(card.id); else selectedIds.add(card.id);
+        render();
+      };
+      handDiv.appendChild(btn);
+    }
+
+    [0, 1, 2, 3].forEach(renderPlayedCards);
+
+    const trickEl = document.getElementById('trickArea');
+    trickEl.textContent = state.currentCombo
+      ? `本墩需要压过：${CoachRealtime.describeCombo(state.currentCombo)}`
+      : '（新的一墩，等待出牌）';
+
+    const coachEl = document.getElementById('coachSuggestion');
+    coachEl.textContent = state.currentTurn === 0 ? currentSuggestion().rationale : '等待其他玩家出牌…';
+
+    renderHistoryPanel();
+  }
+
+  function renderHistoryPanel() {
+    const summary = CoachHistory.summarizeHistory(loadHistory());
+    const el = document.getElementById('historyContent');
+    if (summary.gamesPlayed === 0) {
+      el.textContent = '还没有历史记录，打完一局后这里会显示你的成长趋势。';
+      return;
+    }
+    el.innerHTML = `
+      <p>已完成 ${Number(summary.gamesPlayed)} 局，平均配合分 ${Number(summary.averageCooperationScore)}</p>
+      <p>${summary.dominantArchetype ? '主要风格：' + summary.dominantArchetype : ''}</p>
+      <p>配合分趋势：${summary.trend.map(Number).join(' → ')}</p>
+    `;
+  }
+
+  function buildMoveLogEntry(action, combo) {
+    const suggestion = currentSuggestion();
+    const matched = action === suggestion.action &&
+      (action === 'pass' || (combo && suggestion.combo &&
+        combo.category === suggestion.combo.category && combo.compareValue === suggestion.combo.compareValue));
+    return {
+      action,
+      partnerWasWinning: !!(state.currentCombo && state.lastPlayerIndex !== null && Engine.TEAM_OF[state.lastPlayerIndex] === Engine.TEAM_OF[0]),
+      comboCategory: combo ? combo.category : null,
+      comboIsBomb: combo ? combo.isBomb : false,
+      handSizeBefore: state.hands[0].length,
+      matchedSuggestion: matched,
+      hadBeatingOptionNonBomb: currentLegalNonBombCheck()
+    };
+  }
+
+  function onPlay() {
+    if (state.currentTurn !== 0) return;
+    const cards = state.hands[0].filter(c => selectedIds.has(c.id));
+    if (cards.length === 0) return;
+    const combo = Combos.classify(cards, levelRank);
+    if (!combo) { alert('这不是一手合法的牌型'); return; }
+    const entry = buildMoveLogEntry('play', combo);
+    const result = Engine.playCombo(state, 0, cards);
+    if (result.error) { alert(result.error); return; }
+    moveLog.push(entry);
+    recordTrickAction(0, cards, false);
+    selectedIds = new Set();
+    afterTurn(result.roundOver);
+  }
+
+  function onPass() {
+    if (state.currentTurn !== 0) return;
+    if (!state.currentCombo) { alert('领出方不能过牌'); return; }
+    const entry = buildMoveLogEntry('pass', null);
+    const result = Engine.pass(state, 0);
+    if (result.error) { alert(result.error); return; }
+    moveLog.push(entry);
+    recordTrickAction(0, [], true);
+    afterTurn(false);
+  }
+
+  function afterTurn(roundOver) {
+    render();
+    if (roundOver) finishRound(); else maybeRunBotTurn();
+  }
+
+  function maybeRunBotTurn() {
+    if (state.currentTurn === null || state.currentTurn === 0) return;
+    setTimeout(() => {
+      const seat = state.currentTurn;
+      const decision = AI.chooseAiPlay(state.hands[seat], state.currentCombo, {
+        selfIndex: seat, lastPlayerIndex: state.lastPlayerIndex, levelRank
+      });
+      const result = decision.action === 'pass'
+        ? Engine.pass(state, seat)
+        : Engine.playCombo(state, seat, decision.combo.cards);
+      if (result.error) { console.error('bot move rejected:', result.error); return; }
+      recordTrickAction(seat, decision.action === 'pass' ? [] : decision.combo.cards, decision.action === 'pass');
+      render();
+      if (result.roundOver) finishRound(); else maybeRunBotTurn();
+    }, BOT_MOVE_DELAY_MS);
+  }
+
+  function finishRound() {
+    const review = CoachReview.reviewHand(moveLog);
+    const gain = Engine.teamLevelGain(state.finishedOrder);
+    const winnerLabel = gain.team === Engine.TEAM_OF[0] ? '你这边获胜' : '对方获胜';
+    document.getElementById('reviewModal').classList.remove('hidden');
+    const patternHtml = review.patterns.length
+      ? '<ul>' + review.patterns.map(p => `<li>${p.label}（出现 ${p.count} 次）</li>`).join('') + '</ul>'
+      : '<p>本局没有发现明显的配合问题，继续保持！</p>';
+    document.getElementById('reviewContent').innerHTML = `
+      <p>${winnerLabel}，本局升 ${gain.gain} 级</p>
+      <p>配合分：${review.cooperationScore}</p>
+      ${patternHtml}
+    `;
+    saveHistoryRecord(review);
+    renderHistoryPanel();
+  }
+
+  function startNewHand() {
+    state = Engine.startRound(levelRank, Math.random);
+    selectedIds = new Set();
+    moveLog = [];
+    trickPlays = { 0: null, 1: null, 2: null, 3: null };
+    render();
+    maybeRunBotTurn();
+  }
+
+  document.getElementById('btnPlay').onclick = onPlay;
+  document.getElementById('btnPass').onclick = onPass;
+  document.getElementById('btnCloseReview').onclick = () => {
+    document.getElementById('reviewModal').classList.add('hidden');
+    startNewHand();
+  };
+  document.getElementById('btnNextHand').onclick = () => {
+    document.getElementById('reviewModal').classList.add('hidden');
+    startNewHand();
+  };
+
+  startNewHand();
+})();
+
+</script>
+</body>
+</html>

@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "test": "node --test",
-    "build": "node build.js"
+    "build": "node build.js",
+    "pages": "npm run build && cp guandan.html docs/index.html"
   },
   "engines": {
     "node": ">=18"
