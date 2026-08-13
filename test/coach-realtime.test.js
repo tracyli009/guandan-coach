@@ -36,3 +36,26 @@ test('when leading a fresh trick (no current combo), the rationale says you are 
   assert.match(suggestion.rationale, /新的一墩，由你领出/);
   assert.ok(!suggestion.rationale.includes('拿下当前墩'), 'leading rationale must not claim to take a trick that does not exist');
 });
+
+test('describeCards names the actual card(s), not just the shape', () => {
+  const single = { cards: [{ rank: '8', suit: 'H' }] };
+  assert.equal(CoachRealtime.describeCards(single), '8♥️');
+  const pair = { cards: [{ rank: 'Q', suit: 'S' }, { rank: 'Q', suit: 'S' }] };
+  assert.equal(CoachRealtime.describeCards(pair), 'Q♠️Q♠️');
+  assert.equal(CoachRealtime.describeCards({ cards: [{ rank: 'BJ', suit: null }] }), '大王');
+  assert.equal(CoachRealtime.describeCards(null), '');
+});
+
+test('rationale names the specific card, not just "单张", so a player with no rank held exactly once can still tell which card is meant', () => {
+  // Every rank in this hand appears 2+ times - there is no card that is a
+  // "lone single" by count, but the game still lets you peel one off any
+  // rank to play as a single. The rationale must say WHICH one.
+  const hand = [
+    c('8', 'H', '1'), c('8', 'C', '2'), c('8', 'D', '3'),
+    c('Q', 'D', '4'), c('Q', 'S', '5')
+  ];
+  const currentCombo = { category: 'single', length: 1, compareValue: 4, isBomb: false }; // single '6'
+  const suggestion = CoachRealtime.suggestPlay(hand, currentCombo, { selfIndex: 0, lastPlayerIndex: 3, levelRank: level });
+  assert.equal(suggestion.action, 'play');
+  assert.match(suggestion.rationale, /8♥️|8♣️|8♦️/, 'rationale should name one specific 8, not just say "单张"');
+});
