@@ -665,7 +665,22 @@ header { display: flex; justify-content: space-between; align-items: center; mar
       const rankCounts = countByRank(hand);
       const bombSafe = pool.filter(o => !cannibalizesABomb(o, rankCounts));
       const finalPool = bombSafe.length > 0 ? bombSafe : pool;
-      const smallest = finalPool.reduce((a, b) => (a.compareValue <= b.compareValue ? a : b));
+      // Among leads tied for the lowest compareValue (typically several
+      // single/pair/triple options built from the same lowest rank), prefer
+      // the one that uses the most cards from THAT SAME rank group. Picking
+      // the lone single and leaving its same-rank siblings behind as an
+      // orphan pair/triple is exactly the "weak spot" this is meant to
+      // avoid - clear the whole low group in one lead instead of
+      // fragmenting it. This is scoped to single/pair/triple only (not
+      // triple_pair/straight/plate, which happen to share the same
+      // compareValue as the rank they start on but pull in a SECOND rank -
+      // dragging extra cards into the lead was never what "clear the weak
+      // spot" meant).
+      const minValue = Math.min(...finalPool.map(o => o.compareValue));
+      const tier = finalPool.filter(o => o.compareValue === minValue);
+      const rankGroupTier = tier.filter(o => o.category === 'single' || o.category === 'pair' || o.category === 'triple');
+      const preferPool = rankGroupTier.length > 0 ? rankGroupTier : tier;
+      const smallest = preferPool.reduce((a, b) => (b.cards.length > a.cards.length ? b : a));
       return { action: 'play', combo: smallest };
     }
 
