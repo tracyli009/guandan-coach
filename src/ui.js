@@ -1,7 +1,7 @@
 /* UI_BOUNDARY */
 (function () {
   'use strict';
-  const { Engine, Combos, Moves, AI, CoachRealtime, CoachReview, CoachHistory } = window.GD;
+  const { Engine, Cards, Combos, Moves, AI, CoachRealtime, CoachReview, CoachHistory, HandOptimizer } = window.GD;
 
   const HISTORY_KEY = 'guandan_coach_history_v1';
   const SUIT_SYMBOL = { S: '♠️', H: '♥️', D: '♦️', C: '♣️' };
@@ -61,24 +61,53 @@
     el.textContent = entry.isPass ? '过' : entry.cards.map(cardLabel).join(' ');
   }
 
+  // Groups the player's own hand by the hand-optimizer's chosen 组牌方案
+  // (see src/hand-optimizer.js) instead of one flat row - cards belonging
+  // to the same group (a same-rank set, or a straight/plate/pair_straight
+  // run) sit together in their own box, with the boxes ordered left-to-
+  // right by rank. Selection state and click behavior are unchanged; this
+  // only changes how the same cards are laid out and labeled.
+  function groupSortValue(group) {
+    return Math.min(...group.cards.map(c => Cards.rankValue(c.rank, levelRank)));
+  }
+
+  function renderHand() {
+    const handDiv = document.getElementById('hand-0');
+    handDiv.innerHTML = '';
+    if (state.hands[0].length === 0) return;
+    const plan = HandOptimizer.choosePlan(state.hands[0], levelRank).best.groups;
+    const orderedGroups = plan.slice().sort((a, b) => groupSortValue(a) - groupSortValue(b));
+    for (const group of orderedGroups) {
+      const groupDiv = document.createElement('div');
+      groupDiv.className = 'hand-group';
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'group-label';
+      labelDiv.textContent = HandOptimizer.describeGroup(group);
+      groupDiv.appendChild(labelDiv);
+      const cardsDiv = document.createElement('div');
+      cardsDiv.className = 'group-cards';
+      for (const card of group.cards) {
+        const btn = document.createElement('button');
+        btn.className = 'card' + (selectedIds.has(card.id) ? ' selected' : '');
+        btn.textContent = cardLabel(card);
+        btn.onclick = () => {
+          if (selectedIds.has(card.id)) selectedIds.delete(card.id); else selectedIds.add(card.id);
+          render();
+        };
+        cardsDiv.appendChild(btn);
+      }
+      groupDiv.appendChild(cardsDiv);
+      handDiv.appendChild(groupDiv);
+    }
+  }
+
   function render() {
     document.getElementById('levelIndicator').textContent = `当前级牌：${levelRank}`;
     [1, 2, 3].forEach(seat => {
       document.getElementById(`count-${seat}`).textContent = `剩余 ${state.hands[seat].length} 张`;
     });
 
-    const handDiv = document.getElementById('hand-0');
-    handDiv.innerHTML = '';
-    for (const card of state.hands[0]) {
-      const btn = document.createElement('button');
-      btn.className = 'card' + (selectedIds.has(card.id) ? ' selected' : '');
-      btn.textContent = cardLabel(card);
-      btn.onclick = () => {
-        if (selectedIds.has(card.id)) selectedIds.delete(card.id); else selectedIds.add(card.id);
-        render();
-      };
-      handDiv.appendChild(btn);
-    }
+    renderHand();
 
     [0, 1, 2, 3].forEach(renderPlayedCards);
 

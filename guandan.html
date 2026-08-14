@@ -19,6 +19,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .seat { text-align: center; margin: 8px 0; }
 .middle-row { display: flex; justify-content: space-between; align-items: center; }
 #trickArea { flex: 1; text-align: center; font-size: 1.1rem; min-height: 2em; }
+#hand-0 { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; margin-top: 8px; }
+.hand-group { display: flex; flex-direction: column; align-items: center; }
+.group-label { font-size: 0.72rem; color: #cde8d8; margin-bottom: 3px; white-space: nowrap; }
+.group-cards { display: flex; }
 .card {
   display: inline-block;
   min-width: 58px;
@@ -608,6 +612,44 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     });
   }
 
+  // Broader than isWeakSingle() above (which is scoped tightly for the
+  // dead-card scoring term): here, ANY low-rank single/pair/triple that
+  // isn't part of a bigger structure counts as a 弱路, matching the KB
+  // domain concept "低单张、小对子、孤三张" - a whole un-organized low
+  // triple is still a weak spot even though it isn't a lone card.
+  function isFragmentedLowGroup(group, levelRank) {
+    if (['straight', 'plate', 'pair_straight', 'triple_pair', 'bomb'].includes(group.category)) return false;
+    const rank = group.rank;
+    if (rank === 'SJ' || rank === 'BJ') return false;
+    return !isStrongRank(rank, levelRank);
+  }
+
+  // A 理牌 narrative grounded in the ACTUAL chosen partition, so it can
+  // never contradict the plan explanation that follows it - e.g. if the
+  // plan absorbed ranks 4-8 into a straight, they must not still be listed
+  // as 5 separate "weak paths" the way a naive per-rank count would.
+  function summarizePlan(plan, levelRank) {
+    const weakGroups = plan.filter(g => isFragmentedLowGroup(g, levelRank));
+    const bombGroups = plan.filter(g => g.category === 'bomb');
+    const organizedCount = plan.length - weakGroups.length - bombGroups.length;
+
+    const parts = [];
+    if (weakGroups.length > 0) {
+      const ranks = weakGroups.map(g => g.rank).join('、');
+      parts.push(`${weakGroups.length}门弱路待清理（${ranks}）`);
+    } else {
+      parts.push('没有明显弱路');
+    }
+    if (bombGroups.length > 0) {
+      const ranks = bombGroups.map(g => (g.rank === 'joker' ? '王' : g.rank)).join('、');
+      parts.push(`${bombGroups.length}组待命炸弹（${ranks}）`);
+    }
+    if (organizedCount > 0) {
+      parts.push(`${organizedCount}组已经组织好的强张/大牌型`);
+    }
+    return `理牌：${parts.join('，')}。`;
+  }
+
   function describeGroup(group) {
     const label = CATEGORY_LABEL[group.category] || group.category;
     const rankLabel = group.rank === 'joker' ? '王' : String(group.rank).replace(/-/g, '~');
@@ -660,7 +702,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
   }
 
   const HandOptimizer = {
-    generatePlans, scorePlan, choosePlan, describePlan, describeGroup,
+    generatePlans, scorePlan, choosePlan, describePlan, describeGroup, summarizePlan,
     buildBombFirstPlan, buildDeGoSingleFirstPlan
   };
 
@@ -1162,7 +1204,6 @@ header { display: flex; justify-content: space-between; align-items: center; mar
   const isNode = typeof module !== 'undefined' && module.exports;
   const AI = isNode ? require('./ai.js') : root.GD.AI;
   const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
-  const HandOrganizer = isNode ? require('./hand-organizer.js') : root.GD.HandOrganizer;
   const HandOptimizer = isNode ? require('./hand-optimizer.js') : root.GD.HandOptimizer;
 
   const CATEGORY_LABEL = {
@@ -1202,11 +1243,14 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 
     // Structure overview, prepended in front of the specific play/pass
     // advice below - this is the "理牌" step: before saying what to play,
-    // say how the whole hand is organized (which ranks are weak paths that
-    // should be cleared, which are strong holds worth keeping, and which
-    // are bombs-in-waiting). Recomputed every call since the hand shrinks
+    // say how the whole hand is organized. Grounded in the optimizer's
+    // ACTUAL chosen partition (not a naive per-rank count) so this line
+    // never contradicts the plan explanation that follows it - e.g. ranks
+    // the optimizer folded into a straight are no longer reported as
+    // separate weak paths. Recomputed every call since the hand shrinks
     // turn by turn.
-    const structureNote = HandOrganizer.summarize(HandOrganizer.analyzeHand(hand, levelRank));
+    const planResult = HandOptimizer.choosePlan(hand, levelRank);
+    const structureNote = HandOptimizer.summarizePlan(planResult.best.groups, levelRank);
 
     if (decision.action === 'pass') {
       const rationale = partnerIsWinning
@@ -1228,7 +1272,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
       // constrained by the current combo, so re-explaining the optimizer's
       // plan there would just repeat itself) - so the optimizer's chosen
       // plan and its reasoning are appended here only.
-      const planNote = HandOptimizer.choosePlan(hand, levelRank).explanation;
+      const planNote = planResult.explanation;
       rationale = decision.combo.isBomb
         ? structureNote + planNote + `手上暂时没有更小的牌可以先出，只能用炸弹（${label}：${cards}）开局，出完之后要尽快找机会重新组织牌型。` + Knowledge.cite('bomb_plan_ahead')
         : structureNote + planNote + `这是新的一墩，由你领出——先出手上最小的${label}（${cards}），把大牌留到后面再用。` + Knowledge.cite('weak_road_first');
@@ -1345,7 +1389,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 /* UI_BOUNDARY */
 (function () {
   'use strict';
-  const { Engine, Combos, Moves, AI, CoachRealtime, CoachReview, CoachHistory } = window.GD;
+  const { Engine, Cards, Combos, Moves, AI, CoachRealtime, CoachReview, CoachHistory, HandOptimizer } = window.GD;
 
   const HISTORY_KEY = 'guandan_coach_history_v1';
   const SUIT_SYMBOL = { S: '♠️', H: '♥️', D: '♦️', C: '♣️' };
@@ -1405,24 +1449,53 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     el.textContent = entry.isPass ? '过' : entry.cards.map(cardLabel).join(' ');
   }
 
+  // Groups the player's own hand by the hand-optimizer's chosen 组牌方案
+  // (see src/hand-optimizer.js) instead of one flat row - cards belonging
+  // to the same group (a same-rank set, or a straight/plate/pair_straight
+  // run) sit together in their own box, with the boxes ordered left-to-
+  // right by rank. Selection state and click behavior are unchanged; this
+  // only changes how the same cards are laid out and labeled.
+  function groupSortValue(group) {
+    return Math.min(...group.cards.map(c => Cards.rankValue(c.rank, levelRank)));
+  }
+
+  function renderHand() {
+    const handDiv = document.getElementById('hand-0');
+    handDiv.innerHTML = '';
+    if (state.hands[0].length === 0) return;
+    const plan = HandOptimizer.choosePlan(state.hands[0], levelRank).best.groups;
+    const orderedGroups = plan.slice().sort((a, b) => groupSortValue(a) - groupSortValue(b));
+    for (const group of orderedGroups) {
+      const groupDiv = document.createElement('div');
+      groupDiv.className = 'hand-group';
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'group-label';
+      labelDiv.textContent = HandOptimizer.describeGroup(group);
+      groupDiv.appendChild(labelDiv);
+      const cardsDiv = document.createElement('div');
+      cardsDiv.className = 'group-cards';
+      for (const card of group.cards) {
+        const btn = document.createElement('button');
+        btn.className = 'card' + (selectedIds.has(card.id) ? ' selected' : '');
+        btn.textContent = cardLabel(card);
+        btn.onclick = () => {
+          if (selectedIds.has(card.id)) selectedIds.delete(card.id); else selectedIds.add(card.id);
+          render();
+        };
+        cardsDiv.appendChild(btn);
+      }
+      groupDiv.appendChild(cardsDiv);
+      handDiv.appendChild(groupDiv);
+    }
+  }
+
   function render() {
     document.getElementById('levelIndicator').textContent = `当前级牌：${levelRank}`;
     [1, 2, 3].forEach(seat => {
       document.getElementById(`count-${seat}`).textContent = `剩余 ${state.hands[seat].length} 张`;
     });
 
-    const handDiv = document.getElementById('hand-0');
-    handDiv.innerHTML = '';
-    for (const card of state.hands[0]) {
-      const btn = document.createElement('button');
-      btn.className = 'card' + (selectedIds.has(card.id) ? ' selected' : '');
-      btn.textContent = cardLabel(card);
-      btn.onclick = () => {
-        if (selectedIds.has(card.id)) selectedIds.delete(card.id); else selectedIds.add(card.id);
-        render();
-      };
-      handDiv.appendChild(btn);
-    }
+    renderHand();
 
     [0, 1, 2, 3].forEach(renderPlayedCards);
 

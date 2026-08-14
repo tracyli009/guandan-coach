@@ -13,6 +13,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .seat { text-align: center; margin: 8px 0; }
 .middle-row { display: flex; justify-content: space-between; align-items: center; }
 #trickArea { flex: 1; text-align: center; font-size: 1.1rem; min-height: 2em; }
+#hand-0 { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; margin-top: 8px; }
+.hand-group { display: flex; flex-direction: column; align-items: center; }
+.group-label { font-size: 0.72rem; color: #cde8d8; margin-bottom: 3px; white-space: nowrap; }
+.group-cards { display: flex; }
 .card {
   display: inline-block;
   min-width: 58px;

@@ -3,7 +3,6 @@
   const isNode = typeof module !== 'undefined' && module.exports;
   const AI = isNode ? require('./ai.js') : root.GD.AI;
   const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
-  const HandOrganizer = isNode ? require('./hand-organizer.js') : root.GD.HandOrganizer;
   const HandOptimizer = isNode ? require('./hand-optimizer.js') : root.GD.HandOptimizer;
 
   const CATEGORY_LABEL = {
@@ -43,11 +42,14 @@
 
     // Structure overview, prepended in front of the specific play/pass
     // advice below - this is the "理牌" step: before saying what to play,
-    // say how the whole hand is organized (which ranks are weak paths that
-    // should be cleared, which are strong holds worth keeping, and which
-    // are bombs-in-waiting). Recomputed every call since the hand shrinks
+    // say how the whole hand is organized. Grounded in the optimizer's
+    // ACTUAL chosen partition (not a naive per-rank count) so this line
+    // never contradicts the plan explanation that follows it - e.g. ranks
+    // the optimizer folded into a straight are no longer reported as
+    // separate weak paths. Recomputed every call since the hand shrinks
     // turn by turn.
-    const structureNote = HandOrganizer.summarize(HandOrganizer.analyzeHand(hand, levelRank));
+    const planResult = HandOptimizer.choosePlan(hand, levelRank);
+    const structureNote = HandOptimizer.summarizePlan(planResult.best.groups, levelRank);
 
     if (decision.action === 'pass') {
       const rationale = partnerIsWinning
@@ -69,7 +71,7 @@
       // constrained by the current combo, so re-explaining the optimizer's
       // plan there would just repeat itself) - so the optimizer's chosen
       // plan and its reasoning are appended here only.
-      const planNote = HandOptimizer.choosePlan(hand, levelRank).explanation;
+      const planNote = planResult.explanation;
       rationale = decision.combo.isBomb
         ? structureNote + planNote + `手上暂时没有更小的牌可以先出，只能用炸弹（${label}：${cards}）开局，出完之后要尽快找机会重新组织牌型。` + Knowledge.cite('bomb_plan_ahead')
         : structureNote + planNote + `这是新的一墩，由你领出——先出手上最小的${label}（${cards}），把大牌留到后面再用。` + Knowledge.cite('weak_road_first');

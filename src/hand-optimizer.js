@@ -240,6 +240,44 @@
     });
   }
 
+  // Broader than isWeakSingle() above (which is scoped tightly for the
+  // dead-card scoring term): here, ANY low-rank single/pair/triple that
+  // isn't part of a bigger structure counts as a 弱路, matching the KB
+  // domain concept "低单张、小对子、孤三张" - a whole un-organized low
+  // triple is still a weak spot even though it isn't a lone card.
+  function isFragmentedLowGroup(group, levelRank) {
+    if (['straight', 'plate', 'pair_straight', 'triple_pair', 'bomb'].includes(group.category)) return false;
+    const rank = group.rank;
+    if (rank === 'SJ' || rank === 'BJ') return false;
+    return !isStrongRank(rank, levelRank);
+  }
+
+  // A 理牌 narrative grounded in the ACTUAL chosen partition, so it can
+  // never contradict the plan explanation that follows it - e.g. if the
+  // plan absorbed ranks 4-8 into a straight, they must not still be listed
+  // as 5 separate "weak paths" the way a naive per-rank count would.
+  function summarizePlan(plan, levelRank) {
+    const weakGroups = plan.filter(g => isFragmentedLowGroup(g, levelRank));
+    const bombGroups = plan.filter(g => g.category === 'bomb');
+    const organizedCount = plan.length - weakGroups.length - bombGroups.length;
+
+    const parts = [];
+    if (weakGroups.length > 0) {
+      const ranks = weakGroups.map(g => g.rank).join('、');
+      parts.push(`${weakGroups.length}门弱路待清理（${ranks}）`);
+    } else {
+      parts.push('没有明显弱路');
+    }
+    if (bombGroups.length > 0) {
+      const ranks = bombGroups.map(g => (g.rank === 'joker' ? '王' : g.rank)).join('、');
+      parts.push(`${bombGroups.length}组待命炸弹（${ranks}）`);
+    }
+    if (organizedCount > 0) {
+      parts.push(`${organizedCount}组已经组织好的强张/大牌型`);
+    }
+    return `理牌：${parts.join('，')}。`;
+  }
+
   function describeGroup(group) {
     const label = CATEGORY_LABEL[group.category] || group.category;
     const rankLabel = group.rank === 'joker' ? '王' : String(group.rank).replace(/-/g, '~');
@@ -292,7 +330,7 @@
   }
 
   const HandOptimizer = {
-    generatePlans, scorePlan, choosePlan, describePlan, describeGroup,
+    generatePlans, scorePlan, choosePlan, describePlan, describeGroup, summarizePlan,
     buildBombFirstPlan, buildDeGoSingleFirstPlan
   };
 

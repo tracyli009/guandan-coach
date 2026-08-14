@@ -166,6 +166,22 @@ test('all 4 jokers (2 small + 2 big) form a joker bomb', () => {
   assert.equal(plan[0].rank, 'joker');
 });
 
+test('summarizePlan does not count ranks absorbed into a straight as separate weak paths', () => {
+  const hand = [
+    c('2', 'D', '1'), c('3', 'H', '2'), c('4', 'S', '3'), c('5', 'D', '4'), c('6', 'C', '5')
+  ];
+  const plan = HandOptimizer.buildBombFirstPlan(hand, level); // forms one straight 2-3-4-5-6
+  const summary = HandOptimizer.summarizePlan(plan, level);
+  assert.match(summary, /没有明显弱路/, 'a hand that\'s fully one straight should report no weak paths, not 5 separate ones');
+});
+
+test('summarizePlan still flags an un-organized low triple as a weak path (not just lone singles)', () => {
+  const hand = [c('3', 'C', '1'), c('3', 'D', '2'), c('3', 'H', '3')];
+  const plan = HandOptimizer.buildBombFirstPlan(hand, level);
+  const summary = HandOptimizer.summarizePlan(plan, level);
+  assert.match(summary, /1门弱路待清理（3）/);
+});
+
 test('describePlan renders each group with its Chinese category label', () => {
   const plan = [
     { category: 'triple', cards: [c('3', 'C', '1'), c('3', 'D', '2'), c('3', 'H', '3')], rank: '3' },
