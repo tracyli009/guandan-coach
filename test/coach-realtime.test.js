@@ -73,3 +73,21 @@ test('when leading with a low triple in hand, rationale calls it "三同张" (na
   assert.match(suggestion.rationale, /3♦️/);
   assert.match(suggestion.rationale, /3♥️/);
 });
+
+test('rationale is prefixed with a 理牌 structure overview before the specific play/pass advice', () => {
+  const hand = [
+    c('3', 'C', '1'), c('3', 'D', '2'), c('3', 'H', '3'),
+    c('K', 'D', '4'), c('K', 'S', '5')
+  ];
+  const suggestion = CoachRealtime.suggestPlay(hand, null, { selfIndex: 0, lastPlayerIndex: null, levelRank: level });
+  assert.match(suggestion.rationale, /^理牌：/, 'rationale should open with the hand-structure summary');
+  assert.match(suggestion.rationale, /弱路/);
+});
+
+test('the 理牌 prefix is also present on pass suggestions', () => {
+  const hand = [c('9', 'S', '1')];
+  const currentCombo = { category: 'single', length: 1, compareValue: 5, isBomb: false };
+  const suggestion = CoachRealtime.suggestPlay(hand, currentCombo, { selfIndex: 0, lastPlayerIndex: 2, levelRank: level });
+  assert.equal(suggestion.action, 'pass');
+  assert.match(suggestion.rationale, /^理牌：/);
+});

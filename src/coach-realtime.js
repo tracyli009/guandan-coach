@@ -3,6 +3,7 @@
   const isNode = typeof module !== 'undefined' && module.exports;
   const AI = isNode ? require('./ai.js') : root.GD.AI;
   const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
+  const HandOrganizer = isNode ? require('./hand-organizer.js') : root.GD.HandOrganizer;
 
   const CATEGORY_LABEL = {
     single: '单张', pair: '对子', triple: '三同张', triple_pair: '三带二',
@@ -36,13 +37,21 @@
 
   function suggestPlay(hand, currentCombo, context) {
     const decision = AI.chooseAiPlay(hand, currentCombo, context);
-    const { lastPlayerIndex, selfIndex } = context;
+    const { lastPlayerIndex, selfIndex, levelRank } = context;
     const partnerIsWinning = !!(currentCombo && lastPlayerIndex !== null && TEAM_OF[lastPlayerIndex] === TEAM_OF[selfIndex]);
+
+    // Structure overview, prepended in front of the specific play/pass
+    // advice below - this is the "理牌" step: before saying what to play,
+    // say how the whole hand is organized (which ranks are weak paths that
+    // should be cleared, which are strong holds worth keeping, and which
+    // are bombs-in-waiting). Recomputed every call since the hand shrinks
+    // turn by turn.
+    const structureNote = HandOrganizer.summarize(HandOrganizer.analyzeHand(hand, levelRank));
 
     if (decision.action === 'pass') {
       const rationale = partnerIsWinning
-        ? '搭档正在领先，不接对门的牌，除非你能跑掉——建议过牌配合搭档。' + Knowledge.cite('partner_defer')
-        : '手上没有合适的牌可以拿下，且保留炸弹更有价值——建议过牌。' + Knowledge.cite('bomb_is_tool');
+        ? structureNote + '搭档正在领先，不接对门的牌，除非你能跑掉——建议过牌配合搭档。' + Knowledge.cite('partner_defer')
+        : structureNote + '手上没有合适的牌可以拿下，且保留炸弹更有价值——建议过牌。' + Knowledge.cite('bomb_is_tool');
       return { action: 'pass', rationale };
     }
 
@@ -54,12 +63,12 @@
       // rationale must not claim to be taking one (that was the bug -
       // this branch used to reuse the follow-up wording verbatim).
       rationale = decision.combo.isBomb
-        ? `手上暂时没有更小的牌可以先出，只能用炸弹（${label}：${cards}）开局，出完之后要尽快找机会重新组织牌型。` + Knowledge.cite('bomb_plan_ahead')
-        : `这是新的一墩，由你领出——先出手上最小的${label}（${cards}），把大牌留到后面再用。` + Knowledge.cite('weak_road_first');
+        ? structureNote + `手上暂时没有更小的牌可以先出，只能用炸弹（${label}：${cards}）开局，出完之后要尽快找机会重新组织牌型。` + Knowledge.cite('bomb_plan_ahead')
+        : structureNote + `这是新的一墩，由你领出——先出手上最小的${label}（${cards}），把大牌留到后面再用。` + Knowledge.cite('weak_road_first');
     } else {
       rationale = decision.combo.isBomb
-        ? `手数已经不多，此时开炸弹（${label}：${cards}）夺回主动权是合理的。` + Knowledge.cite('bomb_plan_ahead')
-        : `用最小的${label}（${cards}）拿下当前墩，既能压制对手又不浪费大牌，建议出这手牌。` + Knowledge.cite('weak_road_first');
+        ? structureNote + `手数已经不多，此时开炸弹（${label}：${cards}）夺回主动权是合理的。` + Knowledge.cite('bomb_plan_ahead')
+        : structureNote + `用最小的${label}（${cards}）拿下当前墩，既能压制对手又不浪费大牌，建议出这手牌。` + Knowledge.cite('weak_road_first');
     }
     return { action: 'play', combo: decision.combo, rationale };
   }
