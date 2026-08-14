@@ -84,6 +84,22 @@ test('rationale is prefixed with a 理牌 structure overview before the specific
   assert.match(suggestion.rationale, /弱路/);
 });
 
+test('when leading, the rationale also includes the hand-optimizer\'s chosen plan and its reasoning', () => {
+  const hand = [
+    c('3', 'C', '1'), c('3', 'D', '2'), c('3', 'H', '3'), c('3', 'S', '4'),
+    c('9', 'S', '5'), c('10', 'D', '6')
+  ];
+  const suggestion = CoachRealtime.suggestPlay(hand, null, { selfIndex: 0, lastPlayerIndex: null, levelRank: level });
+  assert.match(suggestion.rationale, /方案/, 'leading rationale should mention the chosen 组牌 plan');
+});
+
+test('a follow/beat turn (currentCombo present) does not repeat the whole-hand optimizer plan', () => {
+  const hand = [c('9', 'S', '1'), c('K', 'H', '2')];
+  const currentCombo = { category: 'single', length: 1, compareValue: 2, isBomb: false };
+  const suggestion = CoachRealtime.suggestPlay(hand, currentCombo, { selfIndex: 0, lastPlayerIndex: 1, levelRank: level });
+  assert.ok(!suggestion.rationale.includes('方案'), 'follow-turn rationale should stay focused on the specific beat, not restate the whole-hand plan');
+});
+
 test('the 理牌 prefix is also present on pass suggestions', () => {
   const hand = [c('9', 'S', '1')];
   const currentCombo = { category: 'single', length: 1, compareValue: 5, isBomb: false };

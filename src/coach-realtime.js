@@ -4,6 +4,7 @@
   const AI = isNode ? require('./ai.js') : root.GD.AI;
   const Knowledge = isNode ? require('./knowledge.js') : root.GD.Knowledge;
   const HandOrganizer = isNode ? require('./hand-organizer.js') : root.GD.HandOrganizer;
+  const HandOptimizer = isNode ? require('./hand-optimizer.js') : root.GD.HandOptimizer;
 
   const CATEGORY_LABEL = {
     single: '单张', pair: '对子', triple: '三同张', triple_pair: '三带二',
@@ -62,9 +63,16 @@
       // Leading a fresh trick: there is no existing combo to "beat", so the
       // rationale must not claim to be taking one (that was the bug -
       // this branch used to reuse the follow-up wording verbatim).
+      //
+      // This is also the one moment where "how should this whole hand be
+      // organized" is actually decided (a follow/beat/pass turn is already
+      // constrained by the current combo, so re-explaining the optimizer's
+      // plan there would just repeat itself) - so the optimizer's chosen
+      // plan and its reasoning are appended here only.
+      const planNote = HandOptimizer.choosePlan(hand, levelRank).explanation;
       rationale = decision.combo.isBomb
-        ? structureNote + `手上暂时没有更小的牌可以先出，只能用炸弹（${label}：${cards}）开局，出完之后要尽快找机会重新组织牌型。` + Knowledge.cite('bomb_plan_ahead')
-        : structureNote + `这是新的一墩，由你领出——先出手上最小的${label}（${cards}），把大牌留到后面再用。` + Knowledge.cite('weak_road_first');
+        ? structureNote + planNote + `手上暂时没有更小的牌可以先出，只能用炸弹（${label}：${cards}）开局，出完之后要尽快找机会重新组织牌型。` + Knowledge.cite('bomb_plan_ahead')
+        : structureNote + planNote + `这是新的一墩，由你领出——先出手上最小的${label}（${cards}），把大牌留到后面再用。` + Knowledge.cite('weak_road_first');
     } else {
       rationale = decision.combo.isBomb
         ? structureNote + `手数已经不多，此时开炸弹（${label}：${cards}）夺回主动权是合理的。` + Knowledge.cite('bomb_plan_ahead')
