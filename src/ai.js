@@ -3,24 +3,10 @@
   const isNode = typeof module !== 'undefined' && module.exports;
   const Moves = isNode ? require('./moves.js') : root.GD.Moves;
   const Combos = isNode ? require('./combos.js') : root.GD.Combos;
+  const Cards = isNode ? require('./cards.js') : root.GD.Cards;
+  const HandOptimizer = isNode ? require('./hand-optimizer.js') : root.GD.HandOptimizer;
 
   const TEAM_OF = { 0: 0, 1: 1, 2: 0, 3: 1 };
-
-  function countByRank(hand) {
-    const counts = {};
-    for (const c of hand) counts[c.rank] = (counts[c.rank] || 0) + 1;
-    return counts;
-  }
-
-  // True if this lead uses even one card from a same-rank stack of 4+ (a
-  // plain 4/5/6/7/8-bomb waiting to happen). Using any card from that stack
-  // - whether as a bare single, part of a pair/triple, or folded into a
-  // triple_pair - drops it below bomb size and cannibalizes it, so this
-  // checks every rank the combo touches, not just combos built from one
-  // rank alone.
-  function cannibalizesABomb(combo, rankCounts) {
-    return combo.cards.some(c => rankCounts[c.rank] >= 4);
-  }
 
   function chooseAiPlay(hand, currentCombo, context) {
     const { selfIndex, lastPlayerIndex, levelRank } = context;
@@ -28,36 +14,36 @@
 
     if (!currentCombo) {
       if (options.length === 0) return { action: 'pass' };
-      // candidateLeads mixes every category/length together, and Combos.compare only
-      // supports comparing two combos of the SAME category/length. Comparing raw
-      // compareValue avoids that crash, and never leads with a bomb unless a bomb is
-      // literally the only selection available (never happens in practice, since a
-      // single is always a valid lead whenever the hand is non-empty).
-      const nonBombLeads = options.filter(o => !o.isBomb);
-      const pool = nonBombLeads.length > 0 ? nonBombLeads : options;
-      // Prefer leads that don't cannibalize a same-rank 4+ stack (a bomb
-      // in waiting) just because it happens to be the lowest rank held -
-      // fall back to allowing it only if every remaining option would.
-      const rankCounts = countByRank(hand);
-      const bombSafe = pool.filter(o => !cannibalizesABomb(o, rankCounts));
-      const finalPool = bombSafe.length > 0 ? bombSafe : pool;
-      // Among leads tied for the lowest compareValue (typically several
-      // single/pair/triple options built from the same lowest rank), prefer
-      // the one that uses the most cards from THAT SAME rank group. Picking
-      // the lone single and leaving its same-rank siblings behind as an
-      // orphan pair/triple is exactly the "weak spot" this is meant to
-      // avoid - clear the whole low group in one lead instead of
-      // fragmenting it. This is scoped to single/pair/triple only (not
-      // triple_pair/straight/plate, which happen to share the same
-      // compareValue as the rank they start on but pull in a SECOND rank -
-      // dragging extra cards into the lead was never what "clear the weak
-      // spot" meant).
-      const minValue = Math.min(...finalPool.map(o => o.compareValue));
-      const tier = finalPool.filter(o => o.compareValue === minValue);
-      const rankGroupTier = tier.filter(o => o.category === 'single' || o.category === 'pair' || o.category === 'triple');
-      const preferPool = rankGroupTier.length > 0 ? rankGroupTier : tier;
-      const smallest = preferPool.reduce((a, b) => (b.cards.length > a.cards.length ? b : a));
-      return { action: 'play', combo: smallest };
+      // Leading defers entirely to the hand-optimizer's chosen 组牌方案
+      // (src/hand-optimizer.js) instead of independently re-deriving "the
+      // smallest lead" from raw compareValue - that used to be blind to
+      // straight/plate/pair_straight structures (compareValue for those is
+      // anchored to their TOP card, so a straight starting low would never
+      // even tie with a lone low single, let alone win), which let the
+      // coach's "理牌" narrative claim a hand was well-organized into
+      // straights while recommending a lead that broke one apart.
+      const plan = HandOptimizer.choosePlan(hand, levelRank).best.groups;
+      // Never voluntarily lead with a bomb the plan formed, unless a bomb
+      // is literally the only group left (mirrors the old bomb-avoidance
+      // behavior, now expressed against the plan's groups instead of raw
+      // legalPlays options).
+      const nonBombGroups = plan.filter(g => g.category !== 'bomb');
+      const pool = nonBombGroups.length > 0 ? nonBombGroups : plan;
+      const sortValue = g => Math.min(...g.cards.map(card => Cards.rankValue(card.rank, levelRank)));
+      const minValue = Math.min(...pool.map(sortValue));
+      // Among groups tied for the lowest starting rank (e.g. a leftover
+      // lone single of rank 3 vs. a pair_straight that also starts at rank
+      // 3), prefer whichever uses more cards - clearing more of the hand
+      // in one lead over leaving cards fragmented behind.
+      const tier = pool.filter(g => sortValue(g) === minValue);
+      const chosen = tier.reduce((a, b) => (b.cards.length > a.cards.length ? b : a));
+      // Combos.classify() returns only the classification metadata, not the
+      // cards themselves (callers are expected to attach them - see how
+      // moves.js's candidateLeads does the same Object.assign) - downstream
+      // consumers (Engine.playCombo, CoachRealtime.describeCards) need
+      // combo.cards to exist.
+      const combo = Object.assign({}, Combos.classify(chosen.cards, levelRank), { cards: chosen.cards });
+      return { action: 'play', combo };
     }
 
     const partnerIsWinning = lastPlayerIndex !== null && TEAM_OF[lastPlayerIndex] === TEAM_OF[selfIndex];

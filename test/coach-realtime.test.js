@@ -60,10 +60,10 @@ test('rationale names the specific card, not just "单张", so a player with no 
   assert.match(suggestion.rationale, /8♥️|8♣️|8♦️/, 'rationale should name one specific 8, not just say "单张"');
 });
 
-test('when leading with a low triple in hand, rationale calls it "三同张" (naming all 3 cards), not "单张"', () => {
+test('when leading with a low triple in hand (no adjacent triple to plate with), rationale calls it "三同张" (naming all 3 cards), not "单张"', () => {
   const hand = [
     c('3', 'C', '1'), c('3', 'D', '2'), c('3', 'H', '3'),
-    c('4', 'D', '4'), c('4', 'H', '5'), c('4', 'S', '6'),
+    c('9', 'D', '4'), c('9', 'H', '5'), c('9', 'S', '6'), // not adjacent to 3 - no plate available
     c('5', 'H', '7'), c('5', 'S', '8')
   ];
   const suggestion = CoachRealtime.suggestPlay(hand, null, { selfIndex: 0, lastPlayerIndex: null, levelRank: level });

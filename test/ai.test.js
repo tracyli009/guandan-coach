@@ -76,17 +76,33 @@ test('leading with a heterogeneous hand (singles and pairs both available) does 
   assert.equal(decision.combo.isBomb, false);
 });
 
-test('when leading and the lowest rank has 3 copies (non-bomb), plays the whole triple instead of peeling off a lone single', () => {
+test('when leading and the lowest rank has 3 copies (non-bomb) with no adjacent rank to plate with, plays the whole triple instead of peeling off a lone single', () => {
   const hand = [
     c('3', 'C', '1'), c('3', 'D', '2'), c('3', 'H', '3'), // triple '3' - lowest rank, only 3 copies (not bomb-eligible)
-    c('4', 'D', '4'), c('4', 'H', '5'), c('4', 'S', '6'), // triple '4'
+    c('9', 'D', '4'), c('9', 'H', '5'), c('9', 'S', '6'), // triple '9' - NOT adjacent to 3, so no plate is possible
     c('5', 'H', '7'), c('5', 'S', '8'),                   // pair '5'
-    c('8', 'S', '9'), c('8', 'S', '10')                   // pair '8'
+    c('K', 'S', '9'), c('K', 'S', '10')                   // pair 'K'
   ];
   const decision = AI.chooseAiPlay(hand, null, { selfIndex: 0, lastPlayerIndex: null, levelRank: level });
   assert.equal(decision.action, 'play');
   assert.equal(decision.combo.category, 'triple', 'should lead the whole triple of 3s, not a lone single 3');
   assert.equal(decision.combo.cards.length, 3);
+});
+
+test('when leading and the lowest two ranks are both triples of adjacent rank, leads the 6-card plate over just the lower triple', () => {
+  // Per the hand-optimizer's 组牌五原则 (去单化/减少轮次): clearing both
+  // triples in ONE lead (a plate/钢板) is strictly more efficient than
+  // leading the lower triple alone and leaving the other triple stranded
+  // for a separate turn.
+  const hand = [
+    c('3', 'C', '1'), c('3', 'D', '2'), c('3', 'H', '3'),
+    c('4', 'D', '4'), c('4', 'H', '5'), c('4', 'S', '6'),
+    c('9', 'S', '7'), c('K', 'H', '8')
+  ];
+  const decision = AI.chooseAiPlay(hand, null, { selfIndex: 0, lastPlayerIndex: null, levelRank: level });
+  assert.equal(decision.action, 'play');
+  assert.equal(decision.combo.category, 'plate', 'should lead the plate covering both triples, not just the lower triple');
+  assert.equal(decision.combo.cards.length, 6);
 });
 
 test('when leading and the lowest rank has only 2 copies, plays the pair rather than a lone single', () => {
