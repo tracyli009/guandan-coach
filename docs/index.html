@@ -1492,8 +1492,13 @@ header { display: flex; justify-content: space-between; align-items: center; mar
       : '（新的一墩，等待出牌）';
 
     const coachEl = document.getElementById('coachSuggestion');
-    coachEl.textContent = state.currentTurn === 0 ? currentSuggestion().rationale : '等待其他玩家出牌…';
-
+    if (state.currentTurn === 0) {
+  const suggestion = currentSuggestion().rationale;
+  const tracking = GD.CardTracker.analyze(state.history, levelRank, 0);
+  coachEl.textContent = suggestion + '\n\n【记牌】' + tracking.summary;
+} else {
+  coachEl.textContent = '等待其他玩家出牌…';
+}
     renderHistoryPanel();
   }
 
